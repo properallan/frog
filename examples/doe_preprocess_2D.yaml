@@ -1,0 +1,41 @@
+doe_file: ./data/doe_lhs.csv
+output_file: ./data/doe_lhs_2D.csv
+other_variables:
+  function: 'runner.run_2D'
+  working_dir: './data/2D'
+  su2_template: './data/template_su2.cfg'
+  su2_config: 'fluid.cfg'
+  domain_axisymmetric: 'YES'
+  domain_Nx: 101
+  domain_Ny: 19
+  domain_inflation_rate: 1.00
+  domain_bl_beta: 1.001
+  domain_bl_nblayers: 7
+  domain_hwall_n: 0.01
+  domain_mesh: './mesh/nozzle.su2'
+  turbulence_model: 'SST'
+  solver_dim: 'FREESTREAM_PRESS_EQ_ONE'
+  fluid: 'STANDARD_AIR'
+  fluid_gamma: 1.35
+  fluid_R: 287.0
+  fluid_critical_temperature: 131.00
+  fluid_critical_pressure: 3588550.0
+  fluid_accentric_factor: 0.035
+  fluid_viscosity_model: 'SUTHERLAND' 
+  fluid_sutherland_viscosity: 1.716E-5
+  fluid_sutherland_temperature: 273.15
+  fluid_sutherland_constant: 110.4
+  fluid_conductivity_model: 'CONSTANT_PRANDTL'
+  fluid_laminar_prandtl: 0.72
+  fluid_turbulent_prandtl: 0.9
+  solver_CFL: 0.01
+  bc_M: 0.0001
+  bc_pb: 101325
+  solver_itmax: 10000
+  solver_tol: -8
+  solver_tscheme: 'EULER_IMPLICIT'
+  solver_fscheme: 'JST_KE'
+  solver_dttype: 'Global'
+  output_files: 'PARAVIEW'
+  throat_radius: 20.32  
+  

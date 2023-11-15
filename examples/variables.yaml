@@ -1,0 +1,12 @@
+variables:
+  bc_p0 : [310953.676, 1725068.952]
+  bc_T0 : [294.444, 833.333]
+  divergence_angle : [10.0, 20.0]
+  bc_Tw : [117.777, 541.666]
+sampler: 'Lhs'
+sampler_args:
+  lhs_type: 'classic'
+  criterion: 'maximin'
+  iterations: 1000
+n_samples: 10
+output_file: './data/doe_lsh.csv'

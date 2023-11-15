@@ -1,0 +1,16 @@
+other_variables:
+  working_dir: './data/1D'
+  domain_size: 100
+  bc_M: 0.0001
+  bc_pb: 101325
+  fluid_R: 287.0
+  fluid_gamma: 1.35
+  solver_itmax: 50000
+  solver_itprint: 1
+  solver_CFL: 0.1
+  solver_tol: 1e-8
+  solver_tscheme: 'Euler'
+  solver_fscheme: 'AUSM'
+  solver_dttype: 'Global'
+  solver_dim: 'Dimensionless'  
+  throat_radius: 20.32

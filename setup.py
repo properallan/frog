@@ -11,4 +11,5 @@ setup(
     author_email='properallan@gmail.com',
     packages=['frog'],
     install_requires= requirements,
+    entry_points={ 'console_scripts': ['frog = frog.__main__:app' ] }
 )
