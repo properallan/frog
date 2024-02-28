@@ -16,18 +16,28 @@ def RMSE(x, y):
     # Root Mean Squared Error 
     return np.sqrt(np.mean((x-y)**2))
 
+def RMSEP(x, y):
+    # Root Mean Squared Error Percentage
+    eps = np.finfo(np.float64).eps
+    return np.sqrt(np.mean((x-y)**2/np.maximum(np.abs(x), eps)))
+
 def NRMSE(x, y):
     # Normalized Root Mean Squared Error 
     #return np.sqrt(np.mean((x-y)**2))/np.mean(x)
-    return np.sqrt(np.mean((x-y)**2))/(np.max(x)-np.min(x))    
+    eps = np.finfo(np.float64).eps
+    return np.sqrt(MSE(x,y))/np.maximum(np.abs(x), eps).mean()
 
-def MAPE(x, y):
+def MAPE(y_true, y_pred):    
     # Mean Absolute Percentage Error 
-    return np.mean(abs((x-y)/x))
+    return np.mean(np.abs(y_pred - y_true) / np.maximum(np.abs(y_true), np.finfo(np.float64).eps))
 
 def R2(x, y):
     # Coefficient of Determination
-    return 1 - np.sum((x-y)**2)/np.sum((x-np.mean(y))**2)
+    eps = np.finfo(np.float64).eps
+    num = np.sum((x-y)**2, axis=0)
+    den = np.maximum(np.sum((x-np.mean(x, axis=0))**2, axis=0), eps)
+    den = np.maximum(den, eps)
+    return 1-(num/den).mean()
 
 def RSE(x, y):
     # Relative Squared Error
@@ -36,3 +46,13 @@ def RSE(x, y):
 def RAE(x, y):
     # Relative Squared Error
     return np.sum((x-y)**2)/ np.sum((x- np.mean(y))**2)
+
+
+def SMAPE(x, y):
+    # Symmetric Mean Absolute Percentage Error 
+    eps = np.finfo(np.float64).eps
+    return np.mean(np.abs(x-y)/np.maximum((np.abs(x)+np.abs(y))/2), eps)
+
+def MAXPE(y_true, y_pred):
+    # Maximum Absolute Percentage Error
+    return np.max(np.abs(y_pred - y_true) / np.maximum(np.abs(y_true), np.finfo(np.float64).eps))

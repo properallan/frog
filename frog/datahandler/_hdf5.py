@@ -293,3 +293,4 @@ class HDF5Handler:
     def __call__(self, data) -> None:
         self.data_for_handling = data
         return self
+    

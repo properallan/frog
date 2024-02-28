@@ -40,14 +40,15 @@ def process(
     log_file: Annotated[str, typer.Option(help='Optional log file with processing results.')]=None):
     """Run the design of experiments."""
 
-    print(load_func('runner.run_1D'))
     doe_run = DoEProcessor(
         doe_file=Path(doe_file))
 
     doe_run.run()
 
-    if log_file is not None:
-        doe_run.save(log_file)
+    if log_file is None:
+        log_file = Path(doe_file).with_suffix('.log.csv').__str__()
+    doe_run.save(log_file)
+
 
 @app.command()
 def preprocess(
@@ -64,5 +65,31 @@ def preprocess(
     doe_run.save(config['output_file'])
     return doe_run
 
+@app.command()
+def run(config_file: Annotated[str, typer.Argument(help='YAML configuration file to run the design of experiments.')]):
+    """Run the design of experiments."""
+    from frog.datahandler import generate as dataset_generate
+    import os
+
+    with open(config_file) as f:
+        config = yaml.safe_load(f)
+
+    os.chdir(Path(config_file).resolve().parent)
+    config_file = Path(config_file).name
+    generate(config_file = config_file)
+
+    preprocess(config_file = config['lf_config_file'])
+    with open(config['lf_config_file']) as f:
+        lf_config = yaml.safe_load(f)
+    process(doe_file = lf_config['output_file'])
+
+    preprocess(config_file = config['hf_config_file'])
+    with open(config['hf_config_file']) as f:
+        hf_config = yaml.safe_load(f)
+    process(doe_file = hf_config['output_file'])
+
+    dataset_generate(config['dataset_config_file'])
+
+    
 if __name__ == "__main__":
     app()
