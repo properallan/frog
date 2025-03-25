@@ -22,16 +22,26 @@ def load_func(dotpath : str):
 def generate(
     config_file: Annotated[str, typer.Argument(help='YAML configuration file to generate the design of experiments.')]):
     """Generate the design of experiments."""
+
     with open(config_file) as f:
         config = yaml.safe_load(f)
+
+    wd = os.getcwd()
+    os.chdir(Path(config_file).resolve().parent)
     
+    if 'random_state' not in config:
+        config['random_state'] = None
+        
     doe_gen = DoEGenerator(
         variables=config['variables'],
         sampler = eval(config['sampler'])(**config['sampler_args']),
         n_samples = config['n_samples'],
+        random_state = config['random_state']
     )
 
     doe_gen.save(config['output_file'])
+    os.chdir(wd)
+    
     return doe_gen
 
 @app.command()
@@ -43,11 +53,15 @@ def process(
     doe_run = DoEProcessor(
         doe_file=Path(doe_file))
 
+    wd = os.getcwd()
+    os.chdir(Path(doe_file).resolve().parent)
     doe_run.run()
+    os.chdir(wd)
 
     if log_file is None:
         log_file = Path(doe_file).with_suffix('.log.csv').__str__()
     doe_run.save(log_file)
+
 
 
 @app.command()
@@ -56,6 +70,8 @@ def preprocess(
     """Configure the design of experiments runner."""
     with open(config_file) as f:
         config = yaml.safe_load(f)
+
+    os.chdir(Path(config_file).resolve().parent)
 
     doe_run = DoEPreProcessor(
         file=Path(config['doe_file']),
@@ -77,18 +93,24 @@ def run(config_file: Annotated[str, typer.Argument(help='YAML configuration file
     os.chdir(Path(config_file).resolve().parent)
     config_file = Path(config_file).name
     generate(config_file = config_file)
+    os.chdir(Path(config_file).resolve().parent)
 
     preprocess(config_file = config['lf_config_file'])
+    os.chdir(Path(config_file).resolve().parent)
     with open(config['lf_config_file']) as f:
         lf_config = yaml.safe_load(f)
     process(doe_file = lf_config['output_file'])
+    os.chdir(Path(config_file).resolve().parent)
 
     preprocess(config_file = config['hf_config_file'])
+    os.chdir(Path(config_file).resolve().parent)
     with open(config['hf_config_file']) as f:
         hf_config = yaml.safe_load(f)
     process(doe_file = hf_config['output_file'])
+    os.chdir(Path(config_file).resolve().parent)
 
     dataset_generate(config['dataset_config_file'])
+    os.chdir(Path(config_file).resolve().parent)
 
     
 if __name__ == "__main__":

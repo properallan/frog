@@ -31,10 +31,11 @@ class DoEGenerator:
         variables : dict, 
         sampler: callable,
         n_samples: int,
-        other_variables: dict = None):
+        other_variables: dict = None, 
+        random_state = 42):
         """Initialize the DoE class."""
         self.space = self.gen_space(variables)
-        self.df = self.gen_doe(variables, sampler, self.space, n_samples)
+        self.df = self.gen_doe(variables, sampler, self.space, n_samples, random_state)
 
         if other_variables is not None:
             self.fdf = self.df.assign(**other_variables)
@@ -50,9 +51,10 @@ class DoEGenerator:
         variables: dict, 
         sampler: object,
         space: object, 
-        n_samples) -> pd.DataFrame:
+        n_samples, 
+        random_state=42) -> pd.DataFrame:
         """Generate the design of experiments."""
-        samples = sampler.generate(space.dimensions, n_samples)
+        samples = sampler.generate(space.dimensions, n_samples, random_state=random_state)
         doe_df =  pd.DataFrame(samples, columns=variables.keys())
         doe_df.index.rename('design_point', inplace=True)
         

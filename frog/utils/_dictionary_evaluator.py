@@ -21,7 +21,7 @@ def eval_dict(d):
         if isinstance(value, dict):
             d[key] = eval_dict(value)
         else:
-            if value != 'min':
+            if value != 'min' and (not isinstance(value, int)):
                 d[key] = eval(value)
             else:
                 d[key] = value

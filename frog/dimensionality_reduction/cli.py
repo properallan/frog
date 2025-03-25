@@ -1,23 +1,7 @@
 import typer
-from typing import Annotated
-from frog.utils import load_func, eval_dict
-
-from frog.optimization import HyperOpt, GridSearch
-from frog.flow_reconstruction import FRNNBuilder, FRKrigingBuilder, FRLinearBuilder, FlowReconstruction, FRBuilder
-from frog.metrics import NRMSE, R2, MAPE, MAXPE
-from pathlib import Path
-import numpy as np
-from hyperopt import hp
-from hyperopt.pyll import scope
-from ray.tune.search.hyperopt import HyperOptSearch
-import yaml
-import tensorflow as tf
-from ray import train, tune
 import sys
 import os
-import yaml
-from frog.normalization import RowScaler
-from frog.transformers import IdentityTransformer
+from typing import Annotated
 
 app = typer.Typer()
 
@@ -27,6 +11,22 @@ sys.path.append(os.getcwd())
 def study(config_file: Annotated[str, typer.Argument(help='YAML configuration file to run the dimensionality reduction study.')]):
     """Run the dimensionality reduction study."""
     from frog.optimization import HyperOpt, GridSearch
+    from frog.utils import load_func, eval_dict
+
+    from frog.flow_reconstruction import FlowReconstruction
+    from frog.metrics import NRMSE, R2, MAPE, MAXPE, MSE, MAE
+    from pathlib import Path
+    import numpy as np
+    from hyperopt import hp
+    from hyperopt.pyll import scope
+    from ray.tune.search.hyperopt import HyperOptSearch
+    import yaml
+    import tensorflow as tf
+    from ray import train, tune
+
+    import yaml
+    from frog.normalization import RowScaler
+    from frog.transformers import IdentityTransformer
 
     with open(config_file, 'r') as f:
         config = yaml.safe_load(f)

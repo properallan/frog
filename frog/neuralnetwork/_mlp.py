@@ -2,6 +2,9 @@
 from typing import Union
 from sklearn.base import BaseEstimator, RegressorMixin, MultiOutputMixin
 
+
+
+
 def get_model ( 
     num_inputs : int, 
     num_outputs : int, 
@@ -48,16 +51,32 @@ class NeuralNetwork(MultiOutputMixin, RegressorMixin, BaseEstimator):
         num_neurons : int,
         activation : str = 'tanh',
         optimizer : Union[callable, str] = 'adam',
-        loss : dict = { 'output_value': 'mean_squared_error'}):
+        loss : dict = { 'output_value': 'mean_squared_error'}, 
+        random_state=42,
+        regularizer=None,
+        regularizer_lambda=None,
+        dropout=None,
+        learning_rate=None):
 
         import tensorflow as tf
+        import ray
+        self.random_state = random_state
+        tf.random.set_seed(random_state)
         
+        if regularizer is not None:
+            if regularizer == 'L1': 
+                regularizer = tf.keras.regularizers.L1(regularizer_lambda)
+            elif regularizer == 'L2':
+                regularizer = tf.keras.regularizers.L2(regularizer_lambda)
+
         # Input layer
         ph_input = tf.keras.Input( shape =( num_inputs ,) ,name='input_placeholder')
         # Hidden layers
-        hidden_layer = tf.keras.layers.Dense ( num_neurons , activation = activation)( ph_input )
+        hidden_layer = tf.keras.layers.Dense ( num_neurons , activation = activation, kernel_regularizer = regularizer)( ph_input )
+        if dropout: hidden_layer = tf.keras.layers.Dropout(dropout)(hidden_layer)
         for layer in range ( num_layers ):
-            hidden_layer = tf.keras.layers.Dense ( num_neurons , activation = activation)( hidden_layer )
+            hidden_layer = tf.keras.layers.Dense ( num_neurons , activation = activation, kernel_regularizer = regularizer )( hidden_layer )
+            if dropout: hidden_layer = tf.keras.layers.Dropout(dropout)(hidden_layer)
 
 
         # Output layer
@@ -65,8 +84,13 @@ class NeuralNetwork(MultiOutputMixin, RegressorMixin, BaseEstimator):
         model = tf.keras.Model ( inputs =[ ph_input ], outputs =[ output ])
         # Optimizer
         #my_adam = tf.keras.optimizers.Adam()
+        if optimizer.upper() == 'ADAM' and learning_rate:
+            optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
         # Compilation
         model.compile ( optimizer = optimizer , loss = loss)
+
+        
+
         self.model = model
 
         self.num_inputs = num_inputs
@@ -77,8 +101,13 @@ class NeuralNetwork(MultiOutputMixin, RegressorMixin, BaseEstimator):
         self.optimizer = optimizer
         self.loss = loss
 
+        #ray.init(ignore_reinit_error=True)
+
     def fit(self, X, y, **fit_kwargs):
-        return self.model.fit(X, y, **fit_kwargs)
+        # Criar diretório único para o experimento
+        
+
+        return self.model.fit(X, y,**fit_kwargs)
 
     def predict(self, X):
         return self.model.predict(X)

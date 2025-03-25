@@ -20,6 +20,9 @@ def generate(
     config_file = Path(config_file).resolve().__str__()
     with open(config_file) as f:
         config = yaml.safe_load(f)
+    
+    wd = os.getcwd()
+    os.chdir(Path(config_file).resolve().parent)
 
     # generate_dataset(
     #     PATH = config['PATH'],
@@ -33,5 +36,6 @@ def generate(
 
     load_func(config['function'])(
        **config['function_args'])
-    
+       
+    os.chdir(wd)
     return 0

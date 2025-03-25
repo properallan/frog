@@ -24,7 +24,7 @@ def sliceDataAlongAxis(data, fractions, axis):
 
     return slices
 
-def split_dataset(TEST_RATIO, VALIDATION_RATIO, snapshots_1D, snapshots_2D):
+def split_dataset(TEST_RATIO, VALIDATION_RATIO, snapshots_1D, snapshots_2D, random_state=42):
     if TEST_RATIO == 0 and VALIDATION_RATIO == 0:
         snapshots_1D_train = snapshots_1D
         snapshots_2D_train = snapshots_2D
@@ -32,16 +32,16 @@ def split_dataset(TEST_RATIO, VALIDATION_RATIO, snapshots_1D, snapshots_2D):
         snapshots_2D_test = np.array([])
         VALIDATION_DATA = (np.array([]), np.array([]))
     elif TEST_RATIO > 0 and VALIDATION_RATIO == 0:
-        snapshots_1D_train, snapshots_1D_test, snapshots_2D_train, snapshots_2D_test = train_test_split(snapshots_1D, snapshots_2D, test_size=TEST_RATIO)
+        snapshots_1D_train, snapshots_1D_test, snapshots_2D_train, snapshots_2D_test = train_test_split(snapshots_1D, snapshots_2D, test_size=TEST_RATIO, random_state=random_state)
         VALIDATION_DATA = (np.array([]), np.array([]))
     elif TEST_RATIO == 0 and VALIDATION_RATIO > 0:
-        snapshots_1D_train, snapshots_1D_valid, snapshots_2D_train, snapshots_2D_valid = train_test_split(snapshots_1D, snapshots_2D, test_size=VALIDATION_RATIO)
+        snapshots_1D_train, snapshots_1D_valid, snapshots_2D_train, snapshots_2D_valid = train_test_split(snapshots_1D, snapshots_2D, test_size=VALIDATION_RATIO, random_state=random_state)
         snapshots_1D_test = np.array([])
         snapshots_2D_test = np.array([])
         VALIDATION_DATA = (snapshots_1D_valid, snapshots_2D_valid)
     elif TEST_RATIO > 0 and VALIDATION_RATIO > 0:
-        snapshots_1D_train, snapshots_1D_testvalid, snapshots_2D_train, snapshots_2D_testvalid = train_test_split(snapshots_1D, snapshots_2D, test_size=TEST_RATIO+VALIDATION_RATIO)
-        snapshots_1D_test, snapshots_1D_valid, snapshots_2D_test, snapshots_2D_valid,= train_test_split(snapshots_1D_testvalid, snapshots_2D_testvalid, test_size=VALIDATION_RATIO/(TEST_RATIO+VALIDATION_RATIO))
+        snapshots_1D_train, snapshots_1D_testvalid, snapshots_2D_train, snapshots_2D_testvalid = train_test_split(snapshots_1D, snapshots_2D, test_size=TEST_RATIO+VALIDATION_RATIO, random_state=random_state)
+        snapshots_1D_test, snapshots_1D_valid, snapshots_2D_test, snapshots_2D_valid,= train_test_split(snapshots_1D_testvalid, snapshots_2D_testvalid, test_size=VALIDATION_RATIO/(TEST_RATIO+VALIDATION_RATIO), random_state=random_state)
         VALIDATION_DATA = (snapshots_1D_valid, snapshots_2D_valid)
 
     return snapshots_1D_train, snapshots_2D_train,  snapshots_1D_test, snapshots_2D_test, VALIDATION_DATA

@@ -3,9 +3,12 @@ from frog.flow_reconstruction import FRBuilder, FRNNBuilder, FRKrigingBuilder
 from ray import train, tune
 from ray.train import RunConfig#, CheckpointConfig
 from ray.tune.search.hyperopt import HyperOptSearch
-from frog.metrics import NRMSE, R2, MAPE
+from ray.tune.search.hebo import HEBOSearch
+from ray.tune.schedulers.hb_bohb import HyperBandForBOHB
+from ray.tune.search.bohb import TuneBOHB
+from frog.metrics import NRMSE, R2, MAPE, MAE, MAXPE, MSE
 from pathlib import Path
-
+from ray.train import CheckpointConfig, SyncConfig
 
 class GridSearch:
     def __init__(self,
@@ -68,11 +71,17 @@ class GridSearch:
             trainable=trainable_wp,
             param_space=search_space,
             run_config=train.RunConfig(
-                storage_path=Path(study_path).resolve().__str__(),
+                storage_path=Path(study_path).parent.resolve(),
                 name=study_name,
                 #checkpoint_config=CheckpointConfig(),
+                checkpoint_config=CheckpointConfig(
+                    num_to_keep=None,
+                    checkpoint_frequency=0
+                ),
+                log_to_file=True,
+                #local_dir=Path(study_path).parent,
             ),
-            tune_config=tune.TuneConfig(num_samples=1),
+            #tune_config=tune.TuneConfig(num_samples=1),
         )
 
         results = tuner.fit()
@@ -110,7 +119,8 @@ class HyperOpt:
         objective_function=None, 
         search_space=None, 
         other_params={}, 
-        search_algorithm=HyperOptSearch, 
+        search_algorithm='HyperOptSearch', 
+        search_algorithm_args={},
         num_samples=1000, 
         metric='nrmse', 
         mode='min',
@@ -124,6 +134,9 @@ class HyperOpt:
             other_params = self.other_params
         if search_space is None:
             search_space = self.search_space
+
+        #import os
+        #os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = Path(hyperopt_path).resolve().__str__()
 
         with_parameters = tune.with_parameters(
             objective_function, 
@@ -140,25 +153,75 @@ class HyperOpt:
         with_resources = tune.with_resources(
             with_parameters, resources)
 
-        search_algo = search_algorithm(search_space, metric=metric, mode=mode)
+        if search_algorithm == 'TuneBOHB':
+            search_algo = eval(search_algorithm)()
+            #algo = tune.search.ConcurrencyLimiter(algo, max_concurrent=4)
+            scheduler = HyperBandForBOHB(
+                time_attr="time_total_s",
+                max_t=120,
+                reduction_factor=4,
+                stop_last_trials=False,
+                #metric=metric,
+                #mode=mode,
+            )
+            tuner = tune.Tuner(
+                with_resources,
+                tune_config=tune.TuneConfig(
+                    metric=metric,
+                    mode=mode,
+                    search_alg=search_algo,
+                    scheduler=scheduler,
+                    num_samples=num_samples,
+                ),
+                run_config=train.RunConfig(
+                    #storage_path=Path(hyperopt_path).parent,
+                    storage_path=Path(hyperopt_path).parent.resolve(),
+                    name=Path(hyperopt_path).stem,
+                    stop={"time_total_s": 60},
+                    checkpoint_config=CheckpointConfig(
+                        num_to_keep=None,
+                        checkpoint_frequency=0
+                    ),
+                    log_to_file=True,
+                    #local_dir=Path(hyperopt_path).parent,
+                ),
+                param_space=search_space,
+            )
+        else:
 
-        tuner = tune.Tuner(
-            with_resources,
-            tune_config=tune.TuneConfig(
-                num_samples=num_samples,
-                search_alg=search_algo,
-            ),
-            run_config=RunConfig(
-                storage_path=Path(hyperopt_path).parent,
-                name=Path(hyperopt_path).stem,
-            ),
-        )
+            #search_algo = eval(search_algorithm)(metric=metric, mode=mode)
+            search_algo = eval(search_algorithm)(search_space, metric=metric, mode=mode)
+
+            tuner = tune.Tuner(
+                with_resources,
+                tune_config=tune.TuneConfig(
+                    num_samples=num_samples,
+                    search_alg=search_algo,
+                ),
+                run_config=RunConfig(
+                    #storage_path=Path(hyperopt_path).parent,
+                    storage_path=Path(hyperopt_path).parent.resolve(),
+                    name=Path(hyperopt_path).stem,
+                    checkpoint_config=CheckpointConfig(
+                        num_to_keep=None,
+                        checkpoint_frequency=0
+                    ),
+                    log_to_file=True,
+                    #local_dir=Path(hyperopt_path).parent,
+                ),
+                #param_space=search_space
+            )
 
         results = tuner.fit()
 
         #print(results.get_best_result(metric="nrmse", mode="min").config)
         
         self.results = results
+
+        study_path = Path(hyperopt_path).parent
+        study_name = Path(hyperopt_path).stem
+        results.get_dataframe().to_csv((Path(study_path) / study_name).with_suffix('.csv').__str__())
+
         return results
 
     def objective(self, config:dict, other_params:dict={}) -> dict:

@@ -62,7 +62,9 @@ def generate_dataset(
     HF_VARIABLES : list,
     HF_TOL_FOR_CONVERGENCE : float,
     TEST_RATIO : float,
-    VALIDATION_RATIO : float):
+    VALIDATION_RATIO : float,
+    DIMENSIONALIZATION = {},
+    random_state = 42):
 
     def get_snapshot_end_index(npz_file,variables):
         npz = np.load(npz_file, allow_pickle=True)
@@ -72,7 +74,13 @@ def generate_dataset(
         snapshots, snapshots_index = dict_to_array_and_index(index_dict, variables)
         return snapshots, snapshots_index
 
-    def get_snapshots(LF_DOE_FILE, HF_DOE_FILE, LF_VARIABLES, HF_VARIABLES, HF_TOL_FOR_CONVERGENCE = -8):
+    def get_snapshots(
+        LF_DOE_FILE, 
+        HF_DOE_FILE, 
+        LF_VARIABLES, 
+        HF_VARIABLES, 
+        HF_TOL_FOR_CONVERGENCE = -8, 
+        DIMENSIONALIZATION = {'Pressure' : 'bc_p0', 'Temperature' : 'bc_T0'}):
         cc2D = ConvergenceChecker(
                 residue_function=get_residue_2D
         )
@@ -106,7 +114,7 @@ def generate_dataset(
 
         snapshots_2D = post_process_2D.get_snapshots(
             variables = HF_VARIABLES,
-            dimensionalization={'Pressure' : 'bc_p0', 'Temperature' : 'bc_T0'}
+            dimensionalization = DIMENSIONALIZATION,
         )
 
         return snapshots_1D, snapshots_2D, post_process_1D, post_process_2D
@@ -124,27 +132,42 @@ def generate_dataset(
     post_process_y.df['snapshots'] = [sy for sy in snapshots_y]
 
     # Split in training, validation and test
-    snapshots_X_train_df, snapshots_y_train_df, snapshots_X_test_df, snapshots_y_test_df, VALIDATION_DATA_df = split_dataset(TEST_RATIO, VALIDATION_RATIO, post_process_X.df, post_process_y.df)
+    snapshots_X_train_df, snapshots_y_train_df, snapshots_X_test_df, snapshots_y_test_df, VALIDATION_DATA_df = split_dataset(TEST_RATIO, VALIDATION_RATIO, post_process_X.df, post_process_y.df, random_state = random_state)
 
     
     snapshots_X_train = np.array(snapshots_X_train_df['snapshots'].tolist())
     snapshots_y_train = np.array(snapshots_y_train_df['snapshots'].tolist())
 
-    np.savez(Path(hyperopt_path) /'training_X.npz', snapshots=snapshots_X_train, doe_file=LF_DOE_FILE, doe_index=snapshots_X_train_df.index, snapshot_index=post_process_X.idx_dict)
-    np.savez(Path(hyperopt_path) /'training_y.npz', snapshots=snapshots_y_train, doe_file=HF_DOE_FILE, doe_index=snapshots_y_train_df.index, snapshot_index=post_process_y.idx_dict)
+    doe_dict = pd.read_csv(LF_DOE_FILE).to_dict('list')
+    doe_dict = pd.DataFrame(doe_dict).iloc[snapshots_X_train_df.index].to_dict('list')
+    np.savez(Path(hyperopt_path) /'training_X.npz', snapshots=snapshots_X_train, doe_file=LF_DOE_FILE, doe_index=snapshots_X_train_df.index, snapshot_index=post_process_X.idx_dict, **doe_dict)
+   
+    doe_dict = pd.read_csv(HF_DOE_FILE).to_dict('list')
+    doe_dict = pd.DataFrame(doe_dict).iloc[snapshots_y_train_df.index].to_dict('list')
+    np.savez(Path(hyperopt_path) /'training_y.npz', snapshots=snapshots_y_train, doe_file=HF_DOE_FILE, doe_index=snapshots_y_train_df.index, snapshot_index=post_process_y.idx_dict, **doe_dict)
 
     if snapshots_X_test_df.size > 0:
         snapshots_X_test = np.array(snapshots_X_test_df['snapshots'].tolist())
         snapshots_y_test = np.array(snapshots_y_test_df['snapshots'].tolist())
-        np.savez(Path(hyperopt_path) /'test_X.npz', snapshots=snapshots_X_test, doe_file=LF_DOE_FILE, doe_index=snapshots_X_test_df.index, snapshot_index=post_process_X.idx_dict)
-        np.savez(Path(hyperopt_path) /'test_y.npz', snapshots=snapshots_y_test, doe_file=HF_DOE_FILE, doe_index=snapshots_y_test_df.index, snapshot_index=post_process_y.idx_dict)
+
+        doe_dict = pd.read_csv(LF_DOE_FILE).to_dict('list')
+        doe_dict = pd.DataFrame(doe_dict).iloc[snapshots_X_test_df.index].to_dict('list')
+        np.savez(Path(hyperopt_path) /'test_X.npz', snapshots=snapshots_X_test, doe_file=LF_DOE_FILE, doe_index=snapshots_X_test_df.index, snapshot_index=post_process_X.idx_dict, **doe_dict)
+        
+        doe_dict = pd.read_csv(HF_DOE_FILE).to_dict('list')
+        doe_dict = pd.DataFrame(doe_dict).iloc[snapshots_y_test_df.index].to_dict('list')
+        np.savez(Path(hyperopt_path) /'test_y.npz', snapshots=snapshots_y_test, doe_file=HF_DOE_FILE, doe_index=snapshots_y_test_df.index, snapshot_index=post_process_y.idx_dict, **doe_dict)
  
     if VALIDATION_DATA_df[0].size > 0 and VALIDATION_DATA_df[1].size > 0:
         VALIDATION_DATA = (np.array(VALIDATION_DATA_df[0]['snapshots'].tolist()), np.array(VALIDATION_DATA_df[1]['snapshots'].tolist()))
-        np.savez(Path(hyperopt_path) /'validation_X.npz', snapshots=VALIDATION_DATA[0], doe_file=LF_DOE_FILE, doe_index=VALIDATION_DATA_df[0].index, snapshot_index=post_process_X.idx_dict)
-        np.savez(Path(hyperopt_path) /'validation_y.npz', snapshots=VALIDATION_DATA[1], doe_file=HF_DOE_FILE, doe_index=VALIDATION_DATA_df[1].index, snapshot_index=post_process_y.idx_dict)
 
-    
+        doe_dict = pd.read_csv(LF_DOE_FILE).to_dict('list')
+        doe_dict = pd.DataFrame(doe_dict).iloc[VALIDATION_DATA_df[0].index].to_dict('list')
+        np.savez(Path(hyperopt_path) /'validation_X.npz', snapshots=VALIDATION_DATA[0], doe_file=LF_DOE_FILE, doe_index=VALIDATION_DATA_df[0].index, snapshot_index=post_process_X.idx_dict, **doe_dict)
+      
+        doe_dict = pd.read_csv(HF_DOE_FILE).to_dict('list')
+        doe_dict = pd.DataFrame(doe_dict).iloc[VALIDATION_DATA_df[1].index].to_dict('list')
+        np.savez(Path(hyperopt_path) /'validation_y.npz', snapshots=VALIDATION_DATA[1], doe_file=HF_DOE_FILE, doe_index=VALIDATION_DATA_df[1].index, snapshot_index=post_process_y.idx_dict, **doe_dict)
 
 class Indexer:
     def __init__(self, snapshots, idx_dict):

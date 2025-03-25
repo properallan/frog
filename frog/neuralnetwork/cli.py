@@ -17,6 +17,8 @@ def optimize(config_file: Annotated[str, typer.Argument(help='YAML configuration
     from hyperopt import hp
     from hyperopt.pyll import scope
     from ray.tune.search.hyperopt import HyperOptSearch
+    from ray.tune.search.bayesopt import BayesOptSearch
+    from ray.tune.search.hebo import HEBOSearch
     import yaml
     import tensorflow as tf
     from frog.utils import load_func, eval_dict
@@ -24,7 +26,8 @@ def optimize(config_file: Annotated[str, typer.Argument(help='YAML configuration
     config = yaml.safe_load(open(config_file))
 
     import os
-    os.chdir(Path(config_file).resolve().parent)
+    #os.chdir(Path(config_file).resolve().parent)
+   
 
     search_space = eval_dict(config['search_space'])
     
@@ -46,9 +49,12 @@ def optimize(config_file: Annotated[str, typer.Argument(help='YAML configuration
     model_builder = eval(config['model_builder'])
 
     optimize_kwargs = config['optimize']
-    optimize_kwargs['hyperopt_path'] = (Path(config['optimize']['hyperopt_path']).resolve() / Path(config_file).stem).__str__()
+    #optimize_kwargs['hyperopt_path'] = (Path(config['optimize']['hyperopt_path']).resolve() / Path(config_file).stem).__str__()
+    optimize_kwargs['hyperopt_path'] = Path(config['optimize']['hyperopt_path']).resolve().__str__()
+    os.makedirs(optimize_kwargs['hyperopt_path'], exist_ok=True)
+    os.chdir(optimize_kwargs['hyperopt_path'])
 
-    optimize_kwargs['search_algorithm'] = eval(optimize_kwargs['search_algorithm'])
+    #optimize_kwargs['search_algorithm'] = eval(optimize_kwargs['search_algorithm'])
     optimize_kwargs['resources'] = eval(optimize_kwargs['resources'])
 
     other_params['model_builder'] = config['model_builder']

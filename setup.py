@@ -1,7 +1,7 @@
 from setuptools import setup
 
-with open('requirements.txt') as f:
-    requirements = f.read().splitlines()
+#with open('requirements.txt') as f:
+#    requirements = f.read().splitlines()
 
 setup(
     name='frog',
@@ -10,6 +10,6 @@ setup(
     author='Allan Moreira de Carvalho',
     author_email='properallan@gmail.com',
     packages=['frog'],
-    install_requires= requirements,
+#:wq    install_requires= requirements,
     entry_points={ 'console_scripts': ['frog = frog.__main__:app' ] }
 )
