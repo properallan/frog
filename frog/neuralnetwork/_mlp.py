@@ -30,6 +30,8 @@ def get_model (
     #my_adam = tf.keras.optimizers.Adam()
     # Compilation
     model.compile ( optimizer = optimizer , loss = loss)
+
+
     return model
 
 def mlp(inputs_train, outputs_train, inputs_validation, outputs_validation, layers, fit_kwargs):
@@ -84,8 +86,9 @@ class NeuralNetwork(MultiOutputMixin, RegressorMixin, BaseEstimator):
         model = tf.keras.Model ( inputs =[ ph_input ], outputs =[ output ])
         # Optimizer
         #my_adam = tf.keras.optimizers.Adam()
-        if optimizer.upper() == 'ADAM' and learning_rate:
-            optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        if isinstance(optimizer, str):
+            if optimizer.upper() == 'ADAM' and learning_rate:
+                optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
         # Compilation
         model.compile ( optimizer = optimizer , loss = loss)
 

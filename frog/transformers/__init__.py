@@ -1,1 +1,2 @@
-from ._identity import *
+from ._identity import IdentityTransformer
+from ._centering import MeanCenteringTransformer

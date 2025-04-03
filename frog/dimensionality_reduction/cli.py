@@ -31,14 +31,14 @@ def study(config_file: Annotated[str, typer.Argument(help='YAML configuration fi
     with open(config_file, 'r') as f:
         config = yaml.safe_load(f)
 
-    os.chdir(Path(config_file).resolve().parent)
+    #os.chdir(Path(config_file).resolve().parent)
 
     # yaml parser
     objective_function = load_func(config['objective_function'])
     search_space = eval_dict(config['search_space'])
     model_builder = eval(config['fr_model_builder'])
     study_name = Path(config_file).stem
-    results_path=config['study_path']
+    #results_path=config['study_path']
     study_path=Path(config['study_path']).resolve().__str__()
 
     config['other_params']['TRAINING_X'] = Path(config['other_params']['TRAINING_X']).resolve().__str__()

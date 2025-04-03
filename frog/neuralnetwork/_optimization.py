@@ -34,13 +34,46 @@ class TuneReporterCallback(tf.keras.callbacks.Callback):
         with open(history_path, "w") as f:
             json.dump(self.history, f)
 
+class IncreaseLROnImprovement(tf.keras.callbacks.Callback):
+    def __init__(self, factor=2, threshold=0.1, patience=3, monitor="val_loss"):
+        super(IncreaseLROnImprovement, self).__init__()
+        self.factor = factor  # Multiplicador do LR
+        self.threshold = threshold  # Percentual mínimo de queda para considerar melhoria
+        self.patience = patience  # Número de épocas consecutivas para aumentar LR
+        self.monitor = monitor
+        self.prev_loss = None
+        self.wait = 0  # Contador de épocas consecutivas de melhora
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        current_loss = logs.get(self.monitor)
+        
+        if current_loss is None:
+            return
+        
+        if self.prev_loss is not None:
+            loss_reduction = (self.prev_loss - current_loss) / self.prev_loss
+            
+            if loss_reduction > self.threshold:
+                self.wait += 1  # Contar épocas consecutivas de melhora
+                if self.wait >= self.patience:
+                    old_lr = float(tf.keras.backend.get_value(self.model.optimizer.lr))
+                    new_lr = old_lr * self.factor
+                    tf.keras.backend.set_value(self.model.optimizer.lr, new_lr)
+                    print(f"\nAumentando learning rate de {old_lr:.6f} para {new_lr:.6f} (epoch {epoch+1})")
+                    self.wait = 0  # Resetar contador após ajuste
+            else:
+                self.wait = 0  # Resetar contador se não houve melhora suficiente
+
+        self.prev_loss = current_loss
+
 def trainable(config, other_params={}):
     from frog.flow_reconstruction import FlowReconstruction
     from frog.metrics import NRMSE, R2, MAPE, MAXPE, MAE, MSE
     from frog.datahandler import DataHandlerNpz
     from sklearn.pipeline import Pipeline
     from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler, MaxAbsScaler
-    from frog.transformers import IdentityTransformer
+    from frog.transformers import IdentityTransformer, MeanCenteringTransformer
     
     from sklearn.decomposition import TruncatedSVD, IncrementalPCA, PCA, KernelPCA, SparsePCA, MiniBatchSparsePCA
     from frog.neuralnetwork import NeuralNetwork
@@ -68,14 +101,21 @@ def trainable(config, other_params={}):
 
     VALIDATION_DATA = (validation_X, validation_y)
 
-    X_scaler = eval(other_params['X_scaler'])
-    y_scaler = eval(other_params['y_scaler'])
+    # X_scaler = eval(other_params['X_scaler'])
+    # y_scaler = eval(other_params['y_scaler'])
 
-    X_reducer = eval(other_params['X_reducer'])
-    y_reducer = eval(other_params['y_reducer'])
+    #X_latent_scaler = eval(other_params['X_latent_scaler'])
+    #y_latent_scaler = eval(other_params['y_latent_scaler'])
 
-    X_rom = Pipeline([X_scaler, X_reducer])
-    y_rom = Pipeline([y_scaler, y_reducer])
+    # X_reducer = eval(other_params['X_reducer'])
+    # y_reducer = eval(other_params['y_reducer'])
+
+    # X_rom = Pipeline([X_scaler, X_reducer])#, X_latent_scaler])
+    # y_rom = Pipeline([y_scaler, y_reducer])#, y_latent_scaler])
+
+    X_rom = eval(other_params['X_rom'])
+    y_rom = eval(other_params['y_rom'])
+
 
     #fr = FRNNBuilder(**{**config, **other_params})
     #fr = builder(**{**config, **other_params})
@@ -89,30 +129,56 @@ def trainable(config, other_params={}):
     )
     callbacks.append(earlystop_callback)
 
-    # Add callback para learning rate scheduler
     if 'learning_rate_scheduler' in other_params.keys():
-        if other_params['learning_rate_scheduler'].upper() == 'ReduceLROnPlateau'.upper() :
-            lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(
-                    #monitor=other_params['learning_rate_scheduler']['monitor'],         # Monitorar a métrica de validação
-                    #factor=other_params['learning_rate_scheduler']['factor'],                 # Reduzir a taxa de aprendizado por um fator de 10
-                    #patience=other_params['learning_rate_scheduler']['patience'],                 # Quantas épocas sem melhoria antes de reduzir o lr
-                    #min_lr=other_params['learning_rate_scheduler']['min_lr']                 # Taxa mínima para a qual o lr pode ser reduzido
-                **other_params['learning_rate_scheduler_kwargs']
+        schedulers = []
+        for learning_rate_scheduler_name in other_params['learning_rate_scheduler']:
+            if learning_rate_scheduler_name.upper() == 'ReduceLROnPlateau'.upper():
+                schedulers.append(
+                    tf.keras.callbacks.ReduceLROnPlateau(
+                        **other_params['learning_rate_scheduler_kwargs'][learning_rate_scheduler_name]
+                    )
                 )
-            callbacks.append(lr_scheduler)
-        
+
+            elif learning_rate_scheduler_name.upper() == 'IncreaseLROnImprovement'.upper():
+                schedulers.append(
+                    IncreaseLROnImprovement(
+                        **other_params['learning_rate_scheduler_kwargs'][learning_rate_scheduler_name]
+                    )
+                )
+
+        callbacks.extend(schedulers)
+
+    # Add callback para learning rate scheduler
+    # if 'learning_rate_scheduler' in other_params.keys():
+    #     if other_params['learning_rate_scheduler'].upper() == 'ReduceLROnPlateau'.upper() :
+    #         lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(
+    #                 #monitor=other_params['learning_rate_scheduler']['monitor'],         # Monitorar a métrica de validação
+    #                 #factor=other_params['learning_rate_scheduler']['factor'],                 # Reduzir a taxa de aprendizado por um fator de 10
+    #                 #patience=other_params['learning_rate_scheduler']['patience'],                 # Quantas épocas sem melhoria antes de reduzir o lr
+    #                 #min_lr=other_params['learning_rate_scheduler']['min_lr']                 # Taxa mínima para a qual o lr pode ser reduzido
+    #             **other_params['learning_rate_scheduler_kwargs']
+    #             )
+    #         callbacks.append(lr_scheduler)       
 
     # Add callback para reportar losses
     experiment_dir = os.path.join(ray.train.get_context().get_trial_dir(), "tensorboard_logs")
     os.makedirs(experiment_dir, exist_ok=True)
     callbacks.append(TuneReporterCallback(log_dir=experiment_dir))
+    
+    regressor = eval(other_params['regressor'])
 
+    # Criar um callback para printar o learning rate
+    # print_lr_callback = tf.keras.callbacks.LambdaCallback(
+    #     on_epoch_end=lambda epoch, logs:
+    #       #print(f"\nEpoch {epoch+1} | LR: {tf.keras.backend.get_value(regressor.optimizer.lr):.6f} | Loss: {logs['loss']:.6f} | Val Loss: {logs.get('val_loss', 'N/A'):.6f}")
+    #       print(f" - lr: {tf.keras.backend.get_value(regressor.optimizer.lr):.4f}")
+    # )
+
+    #callbacks.append(print_lr_callback)
 
     fit_kwargs = dict( 
         regressor__callbacks=callbacks,
     )
-    
-    regressor = eval(other_params['regressor'])
 
     surrogate = Pipeline([
         ('regressor', regressor),
@@ -128,26 +194,33 @@ def trainable(config, other_params={}):
     builder = eval(other_params['model_builder'])
     fr = builder(X_rom=X_rom, y_rom=y_rom, surrogate=surrogate)
     
+    
 
     #metrics_dict = eval_dict(other_params['metrics'])
     metrics_dict = other_params['metrics']
 
     if 'kfold_cross_validation' in other_params.keys():
-        
         from sklearn.model_selection import KFold
+
+        training_X = np.vstack((training_X, validation_X))
+        training_y = np.vstack((training_y, validation_y))
 
         kf = KFold(
             #n_splits=K, shuffle=True, random_state=42
             **other_params['kfold_cross_validation']
             )
 
+
         fold_metrics = {}
         for train_index, val_index in kf.split(training_X):
+            
             X_train, X_val = training_X[train_index], training_X[val_index]
             y_train, y_val = training_y[train_index], training_y[val_index]
 
             VALIDATION_DATA = (X_val, y_val)
+            fit_kwargs.update({'regressor__validation_data': VALIDATION_DATA })
 
+            fr = builder(X_rom=X_rom, y_rom=y_rom, surrogate=surrogate)
             fr.fit(X=X_train, y=y_train, **fit_kwargs)
 
             prediction = fr.predict(X_val)
@@ -163,12 +236,20 @@ def trainable(config, other_params={}):
 
     else:
         fr.fit(X=training_X, y=training_y, **fit_kwargs) 
-        prediction = fr.predict(validation_y)
+        prediction = fr.predict(validation_X)
         #ground_truth = test_y
         ground_truth = validation_y
 
         metrics = {}
         for key, value in metrics_dict.items():
             metrics[key] = float(eval(value)(ground_truth, prediction))
-   
+    
+    import dill
+    #from ray.air import session
+    # Criando diretório para salvar o checkpoint
+    trial_dir = ray.train.get_context().get_trial_dir()
+
+    with open(os.path.join(trial_dir, 'model.pkl'), "wb") as f:
+        dill.dump(fr, f)  # Salva o modelo como pickle
+
     return metrics

@@ -10,6 +10,20 @@ from frog.metrics import NRMSE, R2, MAPE, MAE, MAXPE, MSE
 from pathlib import Path
 from ray.train import CheckpointConfig, SyncConfig
 
+import os
+import shutil
+
+def create_clean_directory(dir_path, overwrite=False):
+    """
+    Cria um diretório. Se já existir, remove todo o conteúdo e recria do zero.
+
+    Args:
+        dir_path (str): Caminho do diretório a ser criado/limpo.
+    """
+    if os.path.exists(dir_path) and overwrite:
+        shutil.rmtree(dir_path)  # Remove o diretório e todo o conteúdo
+    os.makedirs(dir_path, exist_ok=True)  # Recria o diretório vazio
+
 class GridSearch:
     def __init__(self,
         objective_function : callable, 
@@ -114,6 +128,42 @@ class HyperOpt:
     
     def get_best_parameters(self, metric='nrmse', mode='min'):
         return self.results.get_best_result(metric=metric, mode=mode).config
+
+    def restore(self,
+        objective_function=None,
+        other_params=None,
+        resources=None,
+        hyperopt_path=None,
+        experiment_name=None):
+
+        import os
+        #os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = Path(hyperopt_path).resolve().__str__()
+
+        experiment_path = (Path(hyperopt_path).resolve() / Path(experiment_name)).__str__()
+
+        with_parameters = tune.with_parameters(
+            objective_function, 
+            other_params=other_params, 
+        )
+        
+        with_resources = tune.with_resources(
+            with_parameters, resources)
+
+        if os.path.exists(experiment_path):
+            tuner = tune.Tuner.restore(
+            path=experiment_path,
+            trainable=with_resources
+        )
+            
+        results = tuner.fit()
+
+        self.results = results
+
+        study_path = Path(hyperopt_path).parent
+        study_name = Path(hyperopt_path).stem
+        results.get_dataframe().to_csv((Path(study_path) / study_name).with_suffix('.csv').__str__())
+
+        return results    
     
     def optimize(self, 
         objective_function=None, 
@@ -125,44 +175,43 @@ class HyperOpt:
         metric='nrmse', 
         mode='min',
         hyperopt_path=None,
+        experiment_name=None,
         resources=None, **kwargs):
-        if hyperopt_path is None:
-            hyperopt_path = Path(self.other_params['PATH']) / 'hyperopt'
-        if objective_function is None:
-            objective_function = self.objective_function
-        if other_params == {}:
-            other_params = self.other_params
-        if search_space is None:
-            search_space = self.search_space
+        # if hyperopt_path is None:
+        #     hyperopt_path = Path(self.other_params['PATH']) / 'hyperopt'
+        # if objective_function is None:
+        #     objective_function = self.objective_function
+        # if other_params == {}:
+        #     other_params = self.other_params
+        # if search_space is None:
+        #     search_space = self.search_space
 
-        #import os
-        #os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = Path(hyperopt_path).resolve().__str__()
+        
+        import os
+        from pathlib import Path
+        os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = Path(hyperopt_path).resolve().__str__()
+
+        # Exemplo de uso
+        
+        experiment_path = (Path(hyperopt_path).resolve() / Path(experiment_name)).__str__()
+        create_clean_directory(experiment_path, overwrite=True)
+
+        #os.makedirs(optimize_kwargs['hyperopt_path'], exist_ok=True)
+        #os.chdir(hyperopt_path)
 
         with_parameters = tune.with_parameters(
             objective_function, 
             other_params=other_params, 
         )
         
-        #with_resources = tune.with_resources(with_parameters, 
-        #                        {
-        #                            "cpu": 1,
-        #                            #"gpu": 0, 
-        #                            #"memory": (128/56)*10**9
-        #                        })
-        
         with_resources = tune.with_resources(
             with_parameters, resources)
 
         if search_algorithm == 'TuneBOHB':
+            from frog.utils import eval_dict
             search_algo = eval(search_algorithm)()
-            #algo = tune.search.ConcurrencyLimiter(algo, max_concurrent=4)
             scheduler = HyperBandForBOHB(
-                time_attr="time_total_s",
-                max_t=120,
-                reduction_factor=4,
-                stop_last_trials=False,
-                #metric=metric,
-                #mode=mode,
+                **eval_dict(search_algorithm_args)
             )
             tuner = tune.Tuner(
                 with_resources,
@@ -175,12 +224,14 @@ class HyperOpt:
                 ),
                 run_config=train.RunConfig(
                     #storage_path=Path(hyperopt_path).parent,
-                    storage_path=Path(hyperopt_path).parent.resolve(),
-                    name=Path(hyperopt_path).stem,
-                    stop={"time_total_s": 60},
+                    storage_path=Path(hyperopt_path).resolve(),
+                    name=experiment_name,
+                    #name=Path(hyperopt_path).stem,
+                    #stop={"time_total_s": 60},
                     checkpoint_config=CheckpointConfig(
-                        num_to_keep=None,
-                        checkpoint_frequency=0
+                        num_to_keep=1,
+                        checkpoint_frequency=0,
+                        #checkpoint_at_end=True,
                     ),
                     log_to_file=True,
                     #local_dir=Path(hyperopt_path).parent,
@@ -200,11 +251,13 @@ class HyperOpt:
                 ),
                 run_config=RunConfig(
                     #storage_path=Path(hyperopt_path).parent,
-                    storage_path=Path(hyperopt_path).parent.resolve(),
-                    name=Path(hyperopt_path).stem,
+                    storage_path=Path(hyperopt_path).resolve(),
+                    name=experiment_name,
+                    #name=Path(hyperopt_path).stem,
                     checkpoint_config=CheckpointConfig(
-                        num_to_keep=None,
-                        checkpoint_frequency=0
+                        num_to_keep=1,
+                        checkpoint_frequency=0,
+                       #checkpoint_at_end=True,
                     ),
                     log_to_file=True,
                     #local_dir=Path(hyperopt_path).parent,
