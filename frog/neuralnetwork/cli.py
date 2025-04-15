@@ -27,6 +27,9 @@ def create_clean_directory(dir_path, overwrite=False):
 def optimize(
     config_file: Annotated[str, typer.Argument(help='YAML configuration file to run the hyperparameter optimization.')],
     restore: bool = typer.Option(False, "-r", "--restore", help="Restore hyperparameter optimization")):
+
+    
+
     from frog.optimization import HyperOpt
     from frog.flow_reconstruction import FlowReconstruction
     from frog.metrics import NRMSE, R2, MAPE, MAXPE, MSE, MAE
@@ -38,14 +41,20 @@ def optimize(
     from ray.tune.search.bayesopt import BayesOptSearch
     from ray.tune.search.hebo import HEBOSearch
     import yaml
-    import tensorflow as tf
     from frog.utils import load_func, eval_dict
 
     config = yaml.safe_load(open(config_file))
 
     import os
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+    import tensorflow as tf
     #os.chdir(Path(config_file).resolve().parent)
-   
+
+    
+    import logging
+
+    logger = logging.getLogger("ray")
+    logger.setLevel(logging.ERROR)
 
     search_space = eval_dict(config['search_space'])
     

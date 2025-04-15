@@ -137,7 +137,7 @@ class HyperOpt:
         experiment_name=None):
 
         import os
-        #os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = Path(hyperopt_path).resolve().__str__()
+        os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = Path(hyperopt_path).resolve().__str__()
 
         experiment_path = (Path(hyperopt_path).resolve() / Path(experiment_name)).__str__()
 
@@ -159,9 +159,9 @@ class HyperOpt:
 
         self.results = results
 
-        study_path = Path(hyperopt_path).parent
-        study_name = Path(hyperopt_path).stem
-        results.get_dataframe().to_csv((Path(study_path) / study_name).with_suffix('.csv').__str__())
+        study_path = Path(hyperopt_path)
+        study_name = Path(experiment_name)
+        results.get_dataframe().to_csv((Path(study_path) / study_name / 'results').with_suffix('.csv').__str__())
 
         return results    
     
@@ -170,7 +170,7 @@ class HyperOpt:
         search_space=None, 
         other_params={}, 
         search_algorithm='HyperOptSearch', 
-        search_algorithm_args={},
+        search_algorithm_kwargs={},
         num_samples=1000, 
         metric='nrmse', 
         mode='min',
@@ -210,9 +210,10 @@ class HyperOpt:
         if search_algorithm == 'TuneBOHB':
             from frog.utils import eval_dict
             search_algo = eval(search_algorithm)()
+            #print('TUNEBOHBBBBBBBBBBBBBBBBBBB')
+            #print(search_algorithm_kwargs)
             scheduler = HyperBandForBOHB(
-                **eval_dict(search_algorithm_args)
-            )
+                **search_algorithm_kwargs)
             tuner = tune.Tuner(
                 with_resources,
                 tune_config=tune.TuneConfig(
@@ -221,6 +222,7 @@ class HyperOpt:
                     search_alg=search_algo,
                     scheduler=scheduler,
                     num_samples=num_samples,
+                    reuse_actors=True,
                 ),
                 run_config=train.RunConfig(
                     #storage_path=Path(hyperopt_path).parent,
@@ -248,6 +250,7 @@ class HyperOpt:
                 tune_config=tune.TuneConfig(
                     num_samples=num_samples,
                     search_alg=search_algo,
+                    reuse_actors=True,
                 ),
                 run_config=RunConfig(
                     #storage_path=Path(hyperopt_path).parent,
@@ -271,9 +274,9 @@ class HyperOpt:
         
         self.results = results
 
-        study_path = Path(hyperopt_path).parent
-        study_name = Path(hyperopt_path).stem
-        results.get_dataframe().to_csv((Path(study_path) / study_name).with_suffix('.csv').__str__())
+        study_path = Path(hyperopt_path)
+        study_name = Path(experiment_name)
+        results.get_dataframe().to_csv((Path(study_path) / study_name / 'results').with_suffix('.csv').__str__())
 
         return results
 

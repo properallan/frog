@@ -68,6 +68,8 @@ class FlowReconstruction(BaseEstimator, TransformerMixin):
         self.surrogate_kwargs = surrogate_kwargs
         self.y_index = None
 
+    
+
     def fit(self, X, y, **kwargs):
         if isinstance(y, IndexedArray):
             self.y_index = y.index
@@ -89,6 +91,8 @@ class FlowReconstruction(BaseEstimator, TransformerMixin):
                 fit_kwargs['regressor__validation_data'] = (X_validation, y_validation)
                 
         print('Performing surrogate model fit')
+        
+
         self.surrogate.fit(
             X, 
             y, 

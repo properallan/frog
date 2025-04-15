@@ -4,6 +4,168 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from frog.datahandler._array import IndexedArray
 
+from sklearn.base import BaseEstimator, TransformerMixin
+import numpy as np
+
+class SliceMaxAbsScaler(BaseEstimator, TransformerMixin):
+    def __init__(self, slices_index=None,):
+        """
+        slices_index: dict com nome do campo -> índices das colunas (ex: {'pressure': slice(0,100)})
+        """
+        self.slices_index = slices_index
+        self.feature_range = {}
+        self.denom = {}
+        self.X_min = {}
+        self.X_max = {}
+
+    def fit(self, X, y=None):
+        if self.slices_index is None:
+            if isinstance(X, IndexedArray):
+                self.slices_index = X.index
+
+        for slice_name, slice_index in self.slices_index.items():
+            slice = X[:, slice_index]
+            slice_min = slice.min()
+            slice_max = slice.max()
+            if slice_min >= 0:
+                # Todos os valores positivos → escalar para [0, 1]
+                self.denom[slice_name] = np.abs(slice_max)
+            else:
+                # Existem negativos → escalar para [-1, 1]
+                self.denom[slice_name] = np.maximum(np.abs(slice_min), np.abs(slice_max))
+                if self.denom[slice_name] == 0.0:
+                    self.denom[slice_name] = 1.0
+            
+        return self
+
+    def transform(self, X):
+        X_scaled = np.zeros_like(X)
+        for slice_name, slice_index in self.slices_index.items():
+            slice = X[:, slice_index]
+            X_scaled[:, slice_index] = slice / self.denom[slice_name]
+        return X_scaled
+    
+
+    def inverse_transform(self, X_scaled):
+        X_rec = np.zeros_like(X_scaled)
+        for slice_name, slice_index in self.slices_index.items():
+            X_rec[:, slice_index] = X_scaled[:, slice_index] * self.denom[slice_name]
+        return X_rec
+    
+    def fit_transform(self, X, y=None):
+        self.fit(X)
+        return self.transform(X)
+
+
+class SliceMinMaxScaler(BaseEstimator, TransformerMixin):
+    def __init__(self, slices_index=None, feature_range=(0, 1)):
+        """
+        slices_index: dict com nome do campo -> índices das colunas (ex: {'pressure': slice(0,100)})
+        feature_range: intervalo desejado após normalização (ex: (0,1) ou (-1,1))
+        """
+        self.slices_index = slices_index
+        self.feature_range = feature_range
+        self.X_min = {}
+        self.X_max = {}
+
+    def fit(self, X, y=None):
+        if self.slices_index is None:
+            if isinstance(X, IndexedArray):
+                self.slices_index = X.index
+
+        for slice_name, slice_index in self.slices_index.items():
+            X_slice = X[:, slice_index]
+            self.X_min[slice_name] = X_slice.min(axis=0)
+            self.X_max[slice_name] = X_slice.max(axis=0)
+        return self
+
+    def transform(self, X):
+        X_scaled = np.zeros_like(X)
+        min_val, max_val = self.feature_range
+        scale = max_val - min_val
+
+        for slice_name, slice_index in self.slices_index.items():
+            X_slice = X[:, slice_index]
+            X_min = self.X_min[slice_name]
+            X_max = self.X_max[slice_name]
+            denom = X_max - X_min
+            denom[denom == 0] = 1.0  # Evita divisão por zero
+
+            X_scaled[:, slice_index] = ((X_slice - X_min) / denom) * scale + min_val
+
+        return X_scaled
+
+    def inverse_transform(self, X_scaled):
+        X_rec = np.zeros_like(X_scaled)
+        min_val, max_val = self.feature_range
+        scale = max_val - min_val
+
+        for slice_name, slice_index in self.slices_index.items():
+            X_slice = X_scaled[:, slice_index]
+            X_min = self.X_min[slice_name]
+            X_max = self.X_max[slice_name]
+            denom = X_max - X_min
+            denom[denom == 0] = 1.0
+
+            X_rec[:, slice_index] = ((X_slice - min_val) / scale) * denom + X_min
+
+        return X_rec
+
+    def fit_transform(self, X, y=None):
+        return self.fit(X).transform(X)
+
+
+
+
+class PhysicalNormalizer(BaseEstimator, TransformerMixin):
+    def __init__(self, slices_index=None, slices_ref=None):
+        """
+        refs: lista com os valores de referência para cada campo.
+              Use None para campos que não devem ser normalizados (ex: Mach).
+              Exemplo: [p_ref, None, T_ref, q_ref]
+        """
+        self.slices_ref = slices_ref
+        self.slices_index = slices_index
+        self.mean = {}
+
+    def fit(self, X, y=None):
+        from frog.datahandler._array import IndexedArray
+        
+        if self.slices_index is None:
+            if isinstance(X, IndexedArray):
+                self.slices_index = X.index
+
+        if self.slices_ref is None and isinstance(X, IndexedArray):
+            self.slices_ref = {}
+            for slice_name, slice_index in self.slices_index.items():
+                self.slices_ref[slice_name] = np.maximum(np.max(X[:, slice_index]),  np.min(X[:, slice_index]))
+        
+        if self.slices_ref is not None and self.slices_index is not None:
+            for slice_name, slice_index in self.slices_index.items():
+                if slice_name not in self.slices_ref.keys():
+                    self.slices_ref[slice_name] = np.maximum(np.max(X[:, slice_index]),  np.min(X[:, slice_index]))
+                self.mean[slice_name] = np.mean(X[:, slice_index])
+        
+        return self
+
+    def transform(self, X):
+        X_norm = np.zeros_like(X)
+        for slice_name, slice_index in self.slices_index.items():
+            ref = self.slices_ref[slice_name]
+            X_norm[:, slice_index] = (X[:, slice_index] - self.mean[slice_name]) / ref
+        return X_norm
+    
+    def fit_transform(self, X, y=None):
+        self.fit(X)
+        return self.transform(X)
+
+    def inverse_transform(self, X_norm):
+        X_rec = np.zeros_like(X_norm)
+        for slice_name, slice_index in self.slices_index.items():
+            ref = self.slices_ref[slice_name]
+            X_rec[:, slice_index] = X_norm[:, slice_index] * ref + self.mean[slice_name]
+        return X_rec
+
 class DataHandlerMinMaxScaler(MinMaxScaler):
     def __init__(self, datahandler, feature_range=(0,1)):
         self.datahandler = datahandler
