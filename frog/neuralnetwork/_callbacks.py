@@ -5,6 +5,66 @@ import tensorflow as tf
 from ray import train
 from tensorflow.keras.models import save_model
 
+class PrintCallback(tf.keras.callbacks.Callback):
+    """
+    Callback para integração com Ray Tune e registro em TensorBoard durante o treinamento com Keras.
+
+    Parâmetros:
+    -----------
+    log_dir : str
+        Caminho para salvar logs do TensorBoard e histórico.
+    fr_model : keras.Model, optional
+        Modelo funcional externo (por exemplo, com normalizações invertidas) para avaliação fora do fit.
+    test_X : np.ndarray, optional
+        Conjunto de dados de teste.
+    test_y : np.ndarray, optional
+        Rótulos/targets reais do conjunto de teste.
+    metrics_dict : dict, optional
+        Dicionário com nome das métricas como chaves e nomes de funções como valores (str).
+        Exemplo: {"R2": "R2", "MAE": "MAE"}
+    """
+    def __init__(self, log_dir="logs", fr_model=None, test_X=None, test_y=None, metrics_dict=None, model_dir=None):
+        super().__init__()
+        self.history = {"loss": [], "val_loss": [], "lr": [], "training_iteration": []}
+        self.writer = tf.summary.create_file_writer(log_dir)
+
+    def on_train_begin(self, logs=None):
+        self.start_time = time.time()
+
+    def on_epoch_end(self, epoch, logs=None):
+        if logs is None:
+            logs = {}
+
+        # Pega o learning rate atual (compatível com schedulers)
+        try:
+            lr = float(tf.keras.backend.get_value(self.model.optimizer.lr))
+        except:
+            step = self.model.optimizer.iterations
+            lr = self.model.optimizer.lr    
+            lr = float(tf.keras.backend.get_value(lr(step)))
+
+        logs['lr'] = lr
+        
+        # Dicionário com métricas a serem reportadas ao Ray Tune
+        metrics_to_report = {
+            "loss": logs.get("loss"),
+            "val_loss": logs.get("val_loss"),
+            "lr": logs.get("lr"),
+            "training_iteration": epoch
+        }
+
+        # Registra métricas no TensorBoard
+        with self.writer.as_default():
+           for key, value in metrics_to_report.items():
+               tf.summary.scalar(key, value, step=epoch)
+           self.writer.flush()
+
+        # Imprime estatísticas a cada 10 épocas
+        if epoch % 1 == 0:
+            elapsed = time.time() - self.start_time
+            it_s = (epoch + 1) / elapsed
+            print(f"Epoch {epoch}: loss={logs['loss']:>4.4f}, val_loss={logs['val_loss']:4>.4f}, lr={lr:>4.4f}, {it_s:>4.4f} it/s")
+
 
 class TuneReporterCallback(tf.keras.callbacks.Callback):
     """

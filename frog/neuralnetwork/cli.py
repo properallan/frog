@@ -26,7 +26,10 @@ def create_clean_directory(dir_path, overwrite=False):
 @app.command()
 def optimize(
     config_file: Annotated[str, typer.Argument(help='YAML configuration file to run the hyperparameter optimization.')],
-    restore: bool = typer.Option(False, "-r", "--restore", help="Restore hyperparameter optimization")):
+    restore: bool = typer.Option(False, "-r", "--restore", help="Restore hyperparameter optimization"),
+    resume_errored: bool = typer.Option(False, "-u", "--resume-errored", help="Resume unfinished (errored) trials from last chekpoint"),
+    restart_errored: bool = typer.Option(False, "-s", "--restart-errored", help="Run errored trials from start"),
+    ):
 
     
 
@@ -102,7 +105,9 @@ def optimize(
             other_params=other_params,
             experiment_name=optimize_kwargs['hyperopt_name'],
             hyperopt_path=optimize_kwargs['hyperopt_path'],
-            resources=optimize_kwargs['resources']
+            resources=optimize_kwargs['resources'],
+            resume_errored=resume_errored,
+            restart_errored=restart_errored
         )
     else:
         hyperopt.optimize(

@@ -6,6 +6,7 @@ from ray.tune.search.hyperopt import HyperOptSearch
 from ray.tune.search.hebo import HEBOSearch
 from ray.tune.schedulers.hb_bohb import HyperBandForBOHB
 from ray.tune.search.bohb import TuneBOHB
+from frog.schedulers import CustomHyperBandForBOHB
 from frog.metrics import NRMSE, R2, MAPE, MAE, MAXPE, MSE
 from pathlib import Path
 from ray.train import CheckpointConfig, SyncConfig
@@ -134,7 +135,9 @@ class HyperOpt:
         other_params=None,
         resources=None,
         hyperopt_path=None,
-        experiment_name=None):
+        experiment_name=None,
+        resume_errored=False,
+        restart_errored=False):
 
         import os
         os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = Path(hyperopt_path).resolve().__str__()
@@ -152,7 +155,9 @@ class HyperOpt:
         if os.path.exists(experiment_path):
             tuner = tune.Tuner.restore(
             path=experiment_path,
-            trainable=with_resources
+            trainable=with_resources,
+            resume_errored=resume_errored,
+            restart_errored=restart_errored
         )
             
         results = tuner.fit()
@@ -170,6 +175,7 @@ class HyperOpt:
         search_space=None, 
         other_params={}, 
         search_algorithm='HyperOptSearch', 
+        search_scheduler='CustomHyperBandForBOHB',
         search_algorithm_kwargs={},
         num_samples=1000, 
         metric='nrmse', 
@@ -189,7 +195,7 @@ class HyperOpt:
         
         import os
         from pathlib import Path
-        os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = Path(hyperopt_path).resolve().__str__()
+        #os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = Path(hyperopt_path).resolve().__str__()
 
         # Exemplo de uso
         
@@ -212,8 +218,10 @@ class HyperOpt:
             search_algo = eval(search_algorithm)()
             #print('TUNEBOHBBBBBBBBBBBBBBBBBBB')
             #print(search_algorithm_kwargs)
-            scheduler = HyperBandForBOHB(
+            #print(search_algorithm_kwargs)
+            scheduler = eval(search_scheduler)(
                 **search_algorithm_kwargs)
+            #print(scheduler._eta)
             tuner = tune.Tuner(
                 with_resources,
                 tune_config=tune.TuneConfig(

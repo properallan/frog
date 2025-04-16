@@ -30,63 +30,6 @@ class LRTensorBoardLogger(tf.keras.callbacks.Callback):
             tf.summary.scalar('lr', data=lr, step=epoch)
             self.writer.flush()
 
-from frog.neuralnetwork import TuneReporterCallback
-# class TuneReporterCallback(tf.keras.callbacks.Callback):
-#     def __init__(self, log_dir="logs"):
-#         super().__init__()
-#         self.log_dir = log_dir
-#         self.history = {"loss": [], "val_loss": [], "lr": []}
-#         self.writer = tf.summary.create_file_writer(log_dir)
-
-#     def on_train_begin(self, logs=None):
-        
-#         self.start_time = time.time()
-
-#     def on_epoch_end(self, epoch, logs=None):
-#         if logs is None:
-#             logs = {}
-
-#         try:
-#             lr = float(tf.keras.backend.get_value(self.model.optimizer.lr))
-#         except:
-#             stehup = self.model.optimizer.iterations
-#             lr = self.model.optimizer.lr    
-#             lr = float(tf.keras.backend.get_value(lr(step)))
-        
-#         logs['lr'] = lr
-
-#         # Salva os logs no histórico
-#         self.history["loss"].append(logs.get("loss"))
-#         self.history["val_loss"].append(logs.get("val_loss"))
-#         self.history["lr"].append(logs.get("lr"))
-
-#         # Reporta métricas para o Ray Tune
-#         #train.report(dict(loss=logs.get("loss"), val_loss=logs.get("val_loss")))
-
-#         # Registra métricas no TensorBoard
-#         with self.writer.as_default():
-        
-#             for key, value in logs.items():
-#                 tf.summary.scalar(key, value, step=epoch)
-#             self.writer.flush()
-
-#         if epoch % 10 == 0:
-#             elapsed = time.time() - self.start_time
-#             it_s = (epoch + 1) / elapsed
-#             try:
-#                 lr = float(tf.keras.backend.get_value(self.model.optimizer.lr))
-#             except:
-#                 step = self.model.optimizer.iterations
-#                 lr = self.model.optimizer.lr    
-#                 lr = float(tf.keras.backend.get_value(lr(step)))
-#             #print(f"[Epoch {epoch+1}] Iterações por segundo: {it_s:.2f}")
-#             print(f"Epoch {epoch}: loss={logs['loss']:>4.4f}, val_loss={logs['val_loss']:4>.4f}, lr={lr:>4.4f}, {it_s:>4.4f} it/s")
-
-#     def on_train_end(self, logs=None):
-#         # Salvar histórico de treinamento em um arquivo JSON
-#         history_path = os.path.join(self.log_dir, "history.json")
-#         with open(history_path, "w") as f:
-#             json.dump(self.history, f)
 
 
 
@@ -106,8 +49,57 @@ def trainable(config, other_params={}):
     import ray
     from collections.abc import Iterable
 
-    
-    
+    def set_callbacks(other_params, tensorboard_logs_dir, model_dir, search_space):
+        from frog.neuralnetwork import TuneReporterCallback
+        callbacks = []
+
+        # Add callback para earling stopping
+        earlystop_callback = tf.keras.callbacks.EarlyStopping(
+            **other_params['early_stopping']    
+        )
+        callbacks.append(earlystop_callback)
+
+        
+        # Add callback para learning rate schedulers
+        if 'learning_rate_scheduler' in other_params.keys():
+            try:
+                "eval twice if it uses value from search_space[KEY]"
+                other_params['learning_rate_scheduler'] = eval(eval(other_params['learning_rate_scheduler']))
+            except:
+                "learning rate scheduler already in correct format"
+                pass
+
+            schedulers = []
+            for learning_rate_scheduler_name in other_params['learning_rate_scheduler']:
+                from frog.neuralnetwork import ReduceLROnPlateau, IncreaseLROnImprovement, EpochRangeReduceLROnPlateau, WarmupCosineDecay
+
+                for key, val in other_params['learning_rate_scheduler_kwargs'][learning_rate_scheduler_name].items():
+                    if type(val) == str:
+                        try:
+                            value = eval(val)
+                        except:
+                            value = val
+                        other_params['learning_rate_scheduler_kwargs'][learning_rate_scheduler_name][key] = value
+
+                schedulers.append(
+                    eval(learning_rate_scheduler_name)(
+                            **other_params['learning_rate_scheduler_kwargs'][learning_rate_scheduler_name]
+                    )
+                )
+            callbacks.extend(schedulers)
+
+            callbacks.append(TuneReporterCallback(
+                    log_dir=tensorboard_logs_dir,
+                    # fr_model=fr,
+                    # test_X=X_test,
+                    # test_y=y_test,
+                    # metrics_dict=metrics_dict, 
+                    model_dir=model_dir
+                ))
+            callbacks.append(LRTensorBoardLogger(tensorboard_logs_dir))
+
+        return callbacks
+
     trial_id = ray.train.get_context().get_trial_id()
     trial_dir = ray.train.get_context().get_trial_dir()
     
@@ -135,80 +127,6 @@ def trainable(config, other_params={}):
 
     X_rom = eval(other_params['X_rom'])
     y_rom = eval(other_params['y_rom'])
-
-    callbacks = []
-
-    # Add callback para earling stopping
-    earlystop_callback = tf.keras.callbacks.EarlyStopping(
-        **other_params['early_stopping']    
-    )
-    callbacks.append(earlystop_callback)
-
-    
-    # Add callback para learning rate schedulers
-    if 'learning_rate_scheduler' in other_params.keys():
-        #print(other_params['learning_rate_scheduler'])
-        try:
-            "eval twice if it uses value from search_space[KEY]"
-            other_params['learning_rate_scheduler'] = eval(eval(other_params['learning_rate_scheduler']))
-        except:
-            "learning rate scheduler already in correct format"
-            pass
-
-        #print(other_params['learning_rate_scheduler'])
-        
-
-        schedulers = []
-        for learning_rate_scheduler_name in other_params['learning_rate_scheduler']:
-            from frog.neuralnetwork import ReduceLROnPlateau, IncreaseLROnImprovement, EpochRangeReduceLROnPlateau, WarmupCosineDecay
-
-            for key, val in other_params['learning_rate_scheduler_kwargs'][learning_rate_scheduler_name].items():
-                if type(val) == str:
-                    other_params['learning_rate_scheduler_kwargs'][learning_rate_scheduler_name][key] = eval(val)
-                #from frog.utils import eval_dict
-                #other_params['learning_rate_scheduler_kwargs'][learning_rate_scheduler_name] = eval_dict(other_params['learning_rate_scheduler_kwargs'][learning_rate_scheduler_name])
-            schedulers.append(
-                eval(learning_rate_scheduler_name)(
-                         **other_params['learning_rate_scheduler_kwargs'][learning_rate_scheduler_name]
-                )
-            )
-            # if learning_rate_scheduler_name.upper() == 'ReduceLROnPlateau'.upper():
-            #      schedulers.append(
-            #          tf.keras.callbacks.ReduceLROnPlateau(
-            #              **other_params['learning_rate_scheduler_kwargs'][learning_rate_scheduler_name]
-            #          )
-            #      )
-            # elif learning_rate_scheduler_name.upper() == 'WarmupCosineDecay'.upper():
-            #      schedulers.append(
-            #          WarmupCosineDecay(
-            #              **other_params['learning_rate_scheduler_kwargs'][learning_rate_scheduler_name]
-            #          )
-            #      )
-            # elif learning_rate_scheduler_name.upper() == 'IncreaseLROnImprovement'.upper():
-            #      schedulers.append(
-            #          IncreaseLROnImprovement(
-            #              **other_params['learning_rate_scheduler_kwargs'][learning_rate_scheduler_name]
-            #          )
-            #      )
-
-            # elif learning_rate_scheduler_name.upper() == 'IncreaseLROnImprovement'.upper():
-            #     schedulers.append(
-            #         IncreaseLROnImprovement(
-            #             **other_params['learning_rate_scheduler_kwargs'][learning_rate_scheduler_name]
-            #         )
-            #     )
-            # else: #learning_rate_scheduler_name.upper() == 'IncreaseLROnImprovement'.upper():
-            #     schedulers.append(
-            #         eval(learning_rate_scheduler_name)(
-            #             **other_params['learning_rate_scheduler_kwargs'][learning_rate_scheduler_name]
-            #         )
-            #     )
-
-
-            #schedulers.append(eval(learning_rate_scheduler))
-
-        #print(schedulers)
-        callbacks.extend(schedulers)
     
     
     initial_epoch = 0
@@ -226,7 +144,7 @@ def trainable(config, other_params={}):
             X_train, X_test = training_X[train_index], training_X[test_index]
             y_train, y_test = training_y[train_index], training_y[test_index]
 
-            fold_dir = os.path.join(trial_dir, f'fold_{k}')
+            
             model_dir = os.path.join(trial_dir, f'fold_{k}', "tensorflow_model")
             tensorboard_logs_dir = os.path.join(trial_dir, f'fold_{k}', "tensorboard_logs")
             fr_model_dir = os.path.join(trial_dir,  f'fold_{k}', "fr_model")
@@ -237,9 +155,8 @@ def trainable(config, other_params={}):
                     return new.join(parts)
                 fit_kwargs_subset = {k: other_params['fit_kwargs'][k] for k in ['regressor__epochs', 'regressor__batch_size', 'regressor__dataset_size'] if k in other_params['fit_kwargs']}
                 fit_kwargs_subset.update({'regressor__dataset_size': X_train.shape[0]})
-                #print(f"fit_kwargs={fit_kwargs_subset}")
                 other_params_regressor = replace_last(other_params['regressor'], ')', f", fit_kwargs={fit_kwargs_subset})")
-                #print(other_params_regressor)
+
 
             regressor = eval(other_params_regressor)
             regressor.rom = y_rom
@@ -249,7 +166,7 @@ def trainable(config, other_params={}):
             if os.path.exists(model_dir):
                 try:
                     with tf.device('/GPU:0'):
-                        regressor.model = tf.keras.models.load_model(model_dir, compile=False)
+                        regressor.model = tf.keras.models.load_model(model_dir, compile=True)
                         regressor.compile()
                     
                     with open(os.path.join(tensorboard_logs_dir, "current_epoch.txt"), "r") as f:
@@ -269,15 +186,7 @@ def trainable(config, other_params={}):
             builder = eval(other_params['model_builder'])            
             fr = builder(X_rom=X_rom, y_rom=y_rom, surrogate=surrogate)
 
-            callbacks.append(TuneReporterCallback(
-                log_dir=tensorboard_logs_dir,
-                # fr_model=fr,
-                # test_X=X_test,
-                # test_y=y_test,
-                # metrics_dict=metrics_dict, 
-                model_dir=model_dir
-            ))
-            callbacks.append(LRTensorBoardLogger(tensorboard_logs_dir))
+            callbacks = set_callbacks(other_params=other_params, tensorboard_logs_dir=tensorboard_logs_dir, model_dir=model_dir, search_space=search_space)
 
             fit_kwargs = dict( 
                 regressor__callbacks=callbacks,
@@ -291,9 +200,16 @@ def trainable(config, other_params={}):
             fit_kwargs.update(other_params['fit_kwargs'])
             fit_kwargs.update({'regressor__initial_epoch': initial_epoch})
 
+            # if not regressor.model._is_compiled:
+            #     # Corrige problema de modelo nao compilao ao recuperar otimizacao de hiperparametros
+            #     regressor.compilte()
+            #     surrogate = Pipeline([
+            #         ('regressor', regressor),
+            #     ])
+            #     fr.surrogate = surrogate
+
             fr.fit(X=X_train, y=y_train, **fit_kwargs)
             prediction = fr.predict(X_test)
-
             ground_truth = y_test
 
             instance_metrics = {}
@@ -305,20 +221,11 @@ def trainable(config, other_params={}):
 
             with open(os.path.join(tensorboard_logs_dir, 'history.json'), "r") as f:
                  history = json.load(f)
-            fold_metrics.update({k:v[-1] if isinstance(v, Iterable) else 0 for k,v in history.items()})
+   
+            fold_metrics.update({k:v[-1] if (isinstance(v, Iterable) and v!=[]) else 0 for k,v in history.items()})
 
-            with open(os.path.join(fr_model_dir, 'fr_model.pkl'), "wb") as f:
-                dill.dump(fr, f)  # Salva o modelo como pickle
-
-            # save_model(
-            #     model=regressor.model,
-            #     filepath=model_dir,
-            #     include_optimizer=True,  # evita problemas com LR schedules customizados
-            #     save_format="tf"          # força SavedModel (pasta)
-            # )
-
-            # with open(os.path.join(fold_dir, 'metrics.json'), "w") as f:
-            #     json.dump(instance_metrics, f)
+            # with open(os.path.join(fr_model_dir, 'fr_model.pkl'), "wb") as f:
+            #     dill.dump(fr, f)  # Salva o modelo como pickle
 
         metrics = {key: np.mean(values) for key, values in fold_metrics.items()}
 
@@ -336,38 +243,27 @@ def trainable(config, other_params={}):
                 return new.join(parts)
             fit_kwargs_subset = {k: other_params['fit_kwargs'][k] for k in ['regressor__epochs', 'regressor__batch_size', 'regressor__dataset_size'] if k in other_params['fit_kwargs']}
             fit_kwargs_subset.update({'regressor__dataset_size': training_X.shape[0]})
-            #print(f"fit_kwargs={fit_kwargs_subset}")
             other_params_regressor = replace_last(other_params['regressor'], ')', f", fit_kwargs={fit_kwargs_subset})")
-            #print(other_params_regressor)
 
         regressor = eval(other_params_regressor)
         regressor.rom = y_rom
 
         # Restaurar modelo se já tiver salvo
         if os.path.exists(model_dir):
-            with tf.device('/GPU:0'):
-                regressor.model = tf.keras.models.load_model(model_dir, compile=False)    
-                regressor.compile()
-
-            with open(os.path.join(tensorboard_logs_dir, "current_epoch.txt"), "r") as f:
-                initial_epoch = int(f.readline().strip())   
-            # try:
-            #     #print(f"[{trial_id}] Restaurando modelo de {model_dir}")
-            #     regressor.model = tf.keras.models.load_model(model_dir)
-            #     #regressor.compile()
+            try:
+                with tf.device('/GPU:0'):
+                    regressor.model = tf.keras.models.load_model(model_dir, compile=True)
+                    regressor.compile()
                 
-            #     with open(os.path.join(tensorboard_logs_dir, "current_epoch.txt"), "w") as f:
-            #         initial_epoch = int(f.readline().strip())    
-            # except:
-            #     initial_epoch = 0
-            #     print("Não foi possível restaurar o modelo")
+                with open(os.path.join(tensorboard_logs_dir, "current_epoch.txt"), "r") as f:
+                    initial_epoch = int(f.readline().strip())    
+            except:
+                print("Não foi possível restaurar o modelo")
         else:
             os.makedirs(model_dir, exist_ok=True)
             os.makedirs(fr_model_dir, exist_ok=True)
             os.makedirs(tensorboard_logs_dir, exist_ok=True)
         
-        
-    
         surrogate = Pipeline([
             ('regressor', regressor),
         ])
@@ -375,15 +271,7 @@ def trainable(config, other_params={}):
         builder = eval(other_params['model_builder'])
         fr = builder(X_rom=X_rom, y_rom=y_rom, surrogate=surrogate)
 
-        callbacks.append(TuneReporterCallback(
-                log_dir=tensorboard_logs_dir,
-                # fr_model=fr,
-                # test_X=test_X,
-                # test_y=test_y,
-                # metrics_dict=metrics_dict, 
-                model_dir=model_dir
-        ))
-        callbacks.append(LRTensorBoardLogger(tensorboard_logs_dir))
+        callbacks = set_callbacks(other_params=other_params, tensorboard_logs_dir=tensorboard_logs_dir, model_dir=model_dir, search_space=search_space)
 
         fit_kwargs = dict( 
             regressor__callbacks=callbacks,
@@ -396,6 +284,14 @@ def trainable(config, other_params={}):
 
         fit_kwargs.update(other_params['fit_kwargs'])
         fit_kwargs.update({'regressor__initial_epoch': initial_epoch})
+
+        # if not regressor.model._is_compiled:
+        #     # Corrige problema de modelo nao compilao ao recuperar otimizacao de hiperparametros
+        #     regressor.compilte()
+        #     surrogate = Pipeline([
+        #         ('regressor', regressor),
+        #     ])
+        #     fr.surrogate = surrogate
 
         fr.fit(X=training_X, y=training_y, **fit_kwargs) 
         prediction = fr.predict(test_X)
@@ -410,19 +306,8 @@ def trainable(config, other_params={}):
         
         metrics.update({k:v[-1] if isinstance(v, Iterable) else 0 for k,v in history.items()})
        
-        with open(os.path.join(fr_model_dir, 'fr_model.pkl'), "wb") as f:
-            dill.dump(fr, f)  # Salva o modelo como pickle
-
-        # Salvar como SavedModel
-        # Apenas o modelo "puro", sem histórico nem lixo extra
-
-        # save_model(
-        #     model=regressor.model,
-        #     filepath=model_dir,
-        #     include_optimizer=True,   # evita problemas com LR schedules customizados
-        #     save_format="tf"          # força SavedModel (pasta)
-        # )
-        # print(f"model saved at {model_dir}")
+        # with open(os.path.join(fr_model_dir, 'fr_model.pkl'), "wb") as f:
+        #     dill.dump(fr, f)  # Salva o modelo como pickle
 
         with open(os.path.join(trial_dir, 'metrics.json'), "w") as f:
             json.dump(metrics, f)

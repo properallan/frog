@@ -160,6 +160,11 @@ class NeuralNetwork(MultiOutputMixin, RegressorMixin, BaseEstimator):
         self.activation = activation
         self.optimizer = optimizer
         self.loss = loss
+        self.dropout = dropout
+        self.loss_kwargs = loss_kwargs
+        self.random_state = random_state
+        self.learning_rate = learning_rate
+        self.fit_kwargs = fit_kwargs
 
         self.compile()
 
