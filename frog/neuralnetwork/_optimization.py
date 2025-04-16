@@ -18,10 +18,10 @@ class LRTensorBoardLogger(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         # Get current learning rate (handles schedules too)
         try:
-            lr = float(tf.keras.backend.get_value(self.model.optimizer.lr))
+            lr = float(tf.keras.backend.get_value(self.model.optimizer.learning_rate))
         except:
             step = self.model.optimizer.iterations
-            lr = self.model.optimizer.lr    
+            lr = self.model.optimizer.learning_rate 
             lr = float(tf.keras.backend.get_value(lr(step)))
         self.lrs.append(lr)
 
@@ -166,7 +166,7 @@ def trainable(config, other_params={}):
             if os.path.exists(model_dir):
                 try:
                     with tf.device('/GPU:0'):
-                        regressor.model = tf.keras.models.load_model(model_dir, compile=True)
+                        regressor.model = tf.keras.models.load_model(model_dir+"/model.keras", compile=True)
                         regressor.compile()
                     
                     with open(os.path.join(tensorboard_logs_dir, "current_epoch.txt"), "r") as f:
@@ -252,7 +252,7 @@ def trainable(config, other_params={}):
         if os.path.exists(model_dir):
             try:
                 with tf.device('/GPU:0'):
-                    regressor.model = tf.keras.models.load_model(model_dir, compile=True)
+                    regressor.model = tf.keras.models.load_model(model_dir+"/model.keras", compile=True)
                     regressor.compile()
                 
                 with open(os.path.join(tensorboard_logs_dir, "current_epoch.txt"), "r") as f:

@@ -37,10 +37,10 @@ class PrintCallback(tf.keras.callbacks.Callback):
 
         # Pega o learning rate atual (compatível com schedulers)
         try:
-            lr = float(tf.keras.backend.get_value(self.model.optimizer.lr))
+            lr = float(tf.keras.backend.get_value(self.model.optimizer.learning_rate))
         except:
             step = self.model.optimizer.iterations
-            lr = self.model.optimizer.lr    
+            lr = self.model.optimizer.learning_rate    
             lr = float(tf.keras.backend.get_value(lr(step)))
 
         logs['lr'] = lr
@@ -115,10 +115,10 @@ class TuneReporterCallback(tf.keras.callbacks.Callback):
 
         # Pega o learning rate atual (compatível com schedulers)
         try:
-            lr = float(tf.keras.backend.get_value(self.model.optimizer.lr))
+            lr = float(tf.keras.backend.get_value(self.model.optimizer.learning_rate))
         except:
             step = self.model.optimizer.iterations
-            lr = self.model.optimizer.lr    
+            lr = self.model.optimizer.learning_rate 
             lr = float(tf.keras.backend.get_value(lr(step)))
 
         logs['lr'] = lr
@@ -179,9 +179,9 @@ class TuneReporterCallback(tf.keras.callbacks.Callback):
         if self.model_dir is not None:
                 save_model(
                 model=self.model,
-                filepath=self.model_dir,
+                filepath=self.model_dir+"/model.keras",
                 include_optimizer=True,   # evita problemas com LR schedules customizados
-                save_format="tf"          # força SavedModel (pasta)
+                #save_format="tf"          # força SavedModel (pasta)
             )
 
     def on_train_end(self, logs=None):
@@ -194,7 +194,7 @@ class TuneReporterCallback(tf.keras.callbacks.Callback):
         if self.model_dir is not None:
                 save_model(
                 model=self.model,
-                filepath=self.model_dir,
+                filepath=self.model_dir+"/model.keras",
                 include_optimizer=True,   # evita problemas com LR schedules customizados
                 save_format="tf"          # força SavedModel (pasta)
             )
@@ -221,7 +221,8 @@ class WarmupCosineDecay(tf.keras.callbacks.Callback):
             lr = min_lr + (self.base_lr - min_lr) * cosine_decay
         
         # Atualizando o learning rate
-        tf.keras.backend.set_value(self.model.optimizer.lr, lr)
+        #tf.keras.backend.set_value(self.model.optimizer.learning_rate, float(lr))
+        self.model.optimizer.learning_rate = tf.Variable(lr, trainable=False)
         #print(f"Epoch {epoch+1}/{self.total_epochs} - Learning Rate: {lr:.6f}")
 
 from tensorflow.keras.callbacks import ReduceLROnPlateau
@@ -274,9 +275,9 @@ class IncreaseLROnImprovement(tf.keras.callbacks.Callback):
             if loss_reduction > self.threshold:
                 self.wait += 1  # Contar épocas consecutivas de melhora
                 if self.wait >= self.patience:
-                    old_lr = float(tf.keras.backend.get_value(self.model.optimizer.lr))
+                    old_lr = float(tf.keras.backend.get_value(self.model.optimizer.learning_rate))
                     new_lr = old_lr * self.factor
-                    tf.keras.backend.set_value(self.model.optimizer.lr, new_lr)
+                    self.model.optimizer.learning_rate = tf.Variable(new_lr, trainable=False)
                     print(f"\nAumentando learning rate de {old_lr:.6f} para {new_lr:.6f} (epoch {epoch+1})")
                     self.wait = 0  # Resetar contador após ajuste
             else:

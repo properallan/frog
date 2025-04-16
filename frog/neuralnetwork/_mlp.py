@@ -16,7 +16,7 @@ def get_model (
     import tensorflow as tf
 
     # Input layer
-    ph_input = tf.keras.Input( shape =( num_inputs ,) ,name='input_placeholder')
+    ph_input = tf.keras.Input( shape =( num_inputs ,))
     # Hidden layers
     hidden_layer = tf.keras.layers.Dense ( num_neurons , activation = activation)( ph_input )
     for layer in range ( num_layers ):
@@ -24,7 +24,7 @@ def get_model (
 
 
     # Output layer
-    output = tf.keras.layers.Dense ( num_outputs , activation ='linear',name='output_value')( hidden_layer)
+    output = tf.keras.layers.Dense ( num_outputs , activation ='linear')( hidden_layer)
     model = tf.keras.Model ( inputs =[ ph_input ], outputs =[ output ])
     # Optimizer
     #my_adam = tf.keras.optimizers.Adam()
@@ -76,7 +76,7 @@ class NeuralNetwork(MultiOutputMixin, RegressorMixin, BaseEstimator):
                 regularizer = tf.keras.regularizers.L2(regularizer_lambda)
 
         # Input layer
-        ph_input = tf.keras.Input( shape =( num_inputs ,) ,name='input_placeholder')
+        ph_input = tf.keras.Input( shape =( num_inputs ,))
         # Hidden layers
         hidden_layer = tf.keras.layers.Dense ( num_neurons , activation = activation, kernel_regularizer = regularizer)( ph_input )
         if dropout: hidden_layer = tf.keras.layers.Dropout(dropout)(hidden_layer)
@@ -86,7 +86,7 @@ class NeuralNetwork(MultiOutputMixin, RegressorMixin, BaseEstimator):
 
 
         # Output layer
-        output = tf.keras.layers.Dense ( num_outputs , activation ='linear',name='output_value')( hidden_layer)
+        output = tf.keras.layers.Dense ( num_outputs , activation ='linear')( hidden_layer)
         model = tf.keras.Model ( inputs =[ ph_input ], outputs =[ output ])
         # Optimizer
         #my_adam = tf.keras.optimizers.Adam()

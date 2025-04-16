@@ -140,7 +140,7 @@ class HyperOpt:
         restart_errored=False):
 
         import os
-        os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = Path(hyperopt_path).resolve().__str__()
+        #os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = Path(hyperopt_path).resolve().__str__()
 
         experiment_path = (Path(hyperopt_path).resolve() / Path(experiment_name)).__str__()
 
