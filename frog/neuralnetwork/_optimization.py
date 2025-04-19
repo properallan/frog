@@ -6,6 +6,22 @@ from ray import train
 import time
 import dill
 
+def setup_logical_device(mem_per_gpu_mb=2048):
+    import tensorflow as tf
+    """Configura 1 logical GPU com a quantidade de memória definida por trial"""
+    gpus = tf.config.list_physical_devices('GPU')
+    if not gpus:
+        print("Nenhuma GPU detectada.")
+        return None
+
+    # Cria 1 logical GPU por trial
+    tf.config.set_logical_device_configuration(
+        gpus[0],
+        [tf.config.LogicalDeviceConfiguration(memory_limit=mem_per_gpu_mb)]
+    )
+    
+    logical_gpus = tf.config.list_logical_devices('GPU')
+    return logical_gpus[0]
 
     
 class LRTensorBoardLogger(tf.keras.callbacks.Callback):
@@ -48,9 +64,10 @@ def trainable(config, other_params={}):
     import tensorflow as tf
     import ray
     from collections.abc import Iterable
+    from frog.neuralnetwork import TuneReporterCallback
 
     def set_callbacks(other_params, tensorboard_logs_dir, model_dir, search_space):
-        from frog.neuralnetwork import TuneReporterCallback
+        
         callbacks = []
 
         # Add callback para earling stopping
@@ -88,17 +105,13 @@ def trainable(config, other_params={}):
                 )
             callbacks.extend(schedulers)
 
-            callbacks.append(TuneReporterCallback(
-                    log_dir=tensorboard_logs_dir,
-                    # fr_model=fr,
-                    # test_X=X_test,
-                    # test_y=y_test,
-                    # metrics_dict=metrics_dict, 
-                    model_dir=model_dir
-                ))
             callbacks.append(LRTensorBoardLogger(tensorboard_logs_dir))
 
         return callbacks
+
+    # Configura 1 logical GPU por trial
+    #logical_gpu = setup_logical_device(mem_per_gpu_mb=other_params['mem_per_gpu_mb'])
+    #tf.config.set_visible_devices([logical_gpu], 'GPU')
 
     trial_id = ray.train.get_context().get_trial_id()
     trial_dir = ray.train.get_context().get_trial_dir()
@@ -139,8 +152,9 @@ def trainable(config, other_params={}):
             **other_params['kfold_cross_validation']
             )
 
-        fold_metrics = {}
+        
         for k, (train_index, test_index) in enumerate(kf.split(training_X)):
+            fold_metrics = {}
             X_train, X_test = training_X[train_index], training_X[test_index]
             y_train, y_test = training_y[train_index], training_y[test_index]
 
@@ -163,17 +177,16 @@ def trainable(config, other_params={}):
 
             # Restaurar modelo se já tiver salvo
             
-            if os.path.exists(model_dir):
-                try:
-                    with tf.device('/GPU:0'):
-                        regressor.model = tf.keras.models.load_model(model_dir+"/model.keras", compile=True)
-                        regressor.compile()
-                    
-                    with open(os.path.join(tensorboard_logs_dir, "current_epoch.txt"), "r") as f:
-                        initial_epoch = int(f.readline().strip())    
-                except:
-                    print("Não foi possível restaurar o modelo")
+            if os.path.exists(model_dir+"/model.keras"):
+                
+                regressor.model = tf.keras.models.load_model(model_dir+"/model.keras", compile=True)
+                regressor.compile()
+            
+                with open(os.path.join(tensorboard_logs_dir, "current_epoch.txt"), "r") as f:
+                    initial_epoch = int(f.readline().strip())    
+               
             else:
+                print("Não foi possível restaurar o modelo")
                 os.makedirs(model_dir, exist_ok=True)
                 os.makedirs(fr_model_dir, exist_ok=True)
                 os.makedirs(tensorboard_logs_dir, exist_ok=True)
@@ -186,7 +199,21 @@ def trainable(config, other_params={}):
             builder = eval(other_params['model_builder'])            
             fr = builder(X_rom=X_rom, y_rom=y_rom, surrogate=surrogate)
 
-            callbacks = set_callbacks(other_params=other_params, tensorboard_logs_dir=tensorboard_logs_dir, model_dir=model_dir, search_space=search_space)
+            callbacks = set_callbacks(
+                other_params=other_params,
+                tensorboard_logs_dir=tensorboard_logs_dir, 
+                model_dir=model_dir, 
+                search_space=search_space)
+            
+            callbacks.append(TuneReporterCallback(
+                    log_dir=tensorboard_logs_dir,
+                    fr_model=fr,
+                    test_X=X_test,
+                    test_y=y_test,
+                    metrics_dict=metrics_dict, 
+                    model_dir=model_dir,
+                    kfold_iteration=k
+                ))
 
             fit_kwargs = dict( 
                 regressor__callbacks=callbacks,
@@ -208,27 +235,43 @@ def trainable(config, other_params={}):
             #     ])
             #     fr.surrogate = surrogate
 
+           
             fr.fit(X=X_train, y=y_train, **fit_kwargs)
             prediction = fr.predict(X_test)
             ground_truth = y_test
+            
 
-            instance_metrics = {}
+
+            fold_metrics['kfold_iteration'] = k
+                  
             for key, value in metrics_dict.items():
                 if key not in fold_metrics.keys():
                     fold_metrics[key] = []
-                instance_metrics[key] = float(eval(value)(ground_truth, prediction))
-                fold_metrics[key].append(instance_metrics[key])
+               
+                fold_metrics[key].append(float(eval(value)(ground_truth, prediction)))
+
 
             with open(os.path.join(tensorboard_logs_dir, 'history.json'), "r") as f:
                  history = json.load(f)
    
-            fold_metrics.update({k:v[-1] if (isinstance(v, Iterable) and v!=[]) else 0 for k,v in history.items()})
-
+            #fold_metrics.update({k:v[-1] if (isinstance(v, Iterable) and v!=[]) else 0 for k,v in history.items()})
+            
             # with open(os.path.join(fr_model_dir, 'fr_model.pkl'), "wb") as f:
             #     dill.dump(fr, f)  # Salva o modelo como pickle
 
-        metrics = {key: np.mean(values) for key, values in fold_metrics.items()}
+            from tensorflow.keras.models import save_model
+        
+            if model_dir is not None:
+                    save_model(
+                    model=fr.surrogate.named_steps['regressor'].model,
+                    filepath=model_dir+"/model.keras",
+                    include_optimizer=True,   # evita problemas com LR schedules customizados
+                    #save_format="tf"          # força SavedModel (pasta)
+                )
 
+        metrics = {key: np.mean(values) if key!='kfold_iteration' else values for key, values in fold_metrics.items()}
+
+        metrics.update({'kfold_iteration': fold_metrics['kfold_iteration']})
         with open(os.path.join(trial_dir, 'metrics.json'), "w") as f:
             json.dump(metrics, f)
     else:
@@ -249,17 +292,15 @@ def trainable(config, other_params={}):
         regressor.rom = y_rom
 
         # Restaurar modelo se já tiver salvo
-        if os.path.exists(model_dir):
-            try:
-                with tf.device('/GPU:0'):
-                    regressor.model = tf.keras.models.load_model(model_dir+"/model.keras", compile=True)
-                    regressor.compile()
+        if os.path.exists(model_dir+"/model.keras"):
+            regressor.model = tf.keras.models.load_model(model_dir+"/model.keras", compile=True)
+            regressor.compile()
                 
-                with open(os.path.join(tensorboard_logs_dir, "current_epoch.txt"), "r") as f:
-                    initial_epoch = int(f.readline().strip())    
-            except:
-                print("Não foi possível restaurar o modelo")
+            with open(os.path.join(tensorboard_logs_dir, "current_epoch.txt"), "r") as f:
+                initial_epoch = int(f.readline().strip())    
+                
         else:
+            print("Não foi possível restaurar o modelo")
             os.makedirs(model_dir, exist_ok=True)
             os.makedirs(fr_model_dir, exist_ok=True)
             os.makedirs(tensorboard_logs_dir, exist_ok=True)
@@ -271,8 +312,23 @@ def trainable(config, other_params={}):
         builder = eval(other_params['model_builder'])
         fr = builder(X_rom=X_rom, y_rom=y_rom, surrogate=surrogate)
 
-        callbacks = set_callbacks(other_params=other_params, tensorboard_logs_dir=tensorboard_logs_dir, model_dir=model_dir, search_space=search_space)
+        callbacks = set_callbacks(
+                other_params=other_params,
+                tensorboard_logs_dir=tensorboard_logs_dir, 
+                model_dir=model_dir, 
+                search_space=search_space,
+                )
+        
+        callbacks.append(TuneReporterCallback(
+                    log_dir=tensorboard_logs_dir,
+                    fr_model=fr,
+                    test_X=test_X,
+                    test_y=test_y,
+                    metrics_dict=metrics_dict, 
+                    model_dir=model_dir
+                ))
 
+        
         fit_kwargs = dict( 
             regressor__callbacks=callbacks,
             regressor__verbose=0
@@ -293,6 +349,7 @@ def trainable(config, other_params={}):
         #     ])
         #     fr.surrogate = surrogate
 
+        #print('EVALUATE WITHOUT KFOLD')
         fr.fit(X=training_X, y=training_y, **fit_kwargs) 
         prediction = fr.predict(test_X)
         ground_truth = test_y
@@ -311,5 +368,17 @@ def trainable(config, other_params={}):
 
         with open(os.path.join(trial_dir, 'metrics.json'), "w") as f:
             json.dump(metrics, f)
+       
 
+        from tensorflow.keras.models import save_model
+
+        if model_dir is not None:
+                save_model(
+                model=fr.surrogate.named_steps['regressor'].model,
+                filepath=model_dir+"/model.keras",
+                include_optimizer=True,   # evita problemas com LR schedules customizados
+                #save_format="tf"          # força SavedModel (pasta)
+            )
+
+    
     return metrics

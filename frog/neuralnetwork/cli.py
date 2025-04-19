@@ -99,6 +99,10 @@ def optimize(
         model_builder=model_builder,
     )
 
+    if 'resources' in config:
+        if 'mem_per_gpu_mb' in config['resources']:
+            other_params['mem_per_gpu_mb'] = int(config['resources']['mem_per_gpu_mb'])
+
     if restore:
         hyperopt.restore(
             objective_function=objective_function,

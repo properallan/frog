@@ -186,6 +186,9 @@ class NeuralNetwork(MultiOutputMixin, RegressorMixin, BaseEstimator):
             Função de perda customizada para usar no Keras.
         """
         
+        from keras.saving import register_keras_serializable
+
+        @register_keras_serializable()
         def loss(y_true, y_pred):
             import tensorflow as tf
             import numpy as np

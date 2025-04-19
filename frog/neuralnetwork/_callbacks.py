@@ -84,19 +84,23 @@ class TuneReporterCallback(tf.keras.callbacks.Callback):
         Dicionário com nome das métricas como chaves e nomes de funções como valores (str).
         Exemplo: {"R2": "R2", "MAE": "MAE"}
     """
-    def __init__(self, log_dir="logs", fr_model=None, test_X=None, test_y=None, metrics_dict=None, model_dir=None):
+    def __init__(self, log_dir="logs", fr_model=None, test_X=None, test_y=None, metrics_dict=None, model_dir=None, kfold_iteration=None):
         super().__init__()
         self.log_dir = log_dir
         self.history = {"loss": [], "val_loss": [], "lr": [], "training_iteration": []}
+        if kfold_iteration is not None:
+            self.history.update({"kfold_iteration": []})
         self.writer = tf.summary.create_file_writer(log_dir)
         self.fr_model = fr_model
         self.test_X = test_X
         self.test_y = test_y
         self.metrics_dict = metrics_dict
         self.model_dir = model_dir
+        self.epoch = 0
+        self.kfold_iteration = kfold_iteration
 
-        if self.metrics_dict:
-            self.history.update({k:[] for k,v in self.metrics_dict.items()})
+        #if self.metrics_dict:
+        #    self.history.update({k:[] for k,v in self.metrics_dict.items()})
 
     def on_train_begin(self, logs=None):
         self.start_time = time.time()
@@ -128,8 +132,12 @@ class TuneReporterCallback(tf.keras.callbacks.Callback):
             "loss": logs.get("loss"),
             "val_loss": logs.get("val_loss"),
             "lr": logs.get("lr"),
-            "training_iteration": epoch
+            "training_iteration": epoch,
         }
+
+        if self.kfold_iteration is not None:
+            metrics_to_report.update({ "kfold_iteration": self.kfold_iteration})
+        
 
         # Calcula métricas customizadas se os dados forem fornecidos
         if self.metrics_dict is not None and self.test_X is not None and self.test_y is not None and self.fr_model is not None:
@@ -138,22 +146,21 @@ class TuneReporterCallback(tf.keras.callbacks.Callback):
                 try:
                     metrics_to_report[key] = float(eval(func_name)(self.test_y, prediction))
                 except Exception as e:
+                    #(f"[Warning] Falha ao calcular a métrica '{key}': {e}")
                     print(f"[Warning] Falha ao calcular a métrica '{key}': {e}")
 
         # Salva métricas padrão no histórico
         for k,v in self.history.items():
             self.history[k].append(metrics_to_report[k])
         
-        #self.history["loss"].append(logs.get("loss"))
-        #self.history["val_loss"].append(logs.get("val_loss"))
-        #self.history["lr"].append(logs.get("lr"))
-        #self.history["training_iteration"].append(epoch)
+        # self.history["loss"].append(logs.get("loss"))
+        # self.history["val_loss"].append(logs.get("val_loss"))
+        # self.history["lr"].append(logs.get("lr"))
+        # self.history["training_iteration"].append(epoch)
         
         # Reporta para Ray Tune
-        if get_context():
+        if get_context() and self.kfold_iteration is None:
             report(metrics_to_report)
-        else:
-            print('NAO TEM CONTEXTO')
 
         # Registra métricas no TensorBoard
         with self.writer.as_default():
@@ -171,7 +178,7 @@ class TuneReporterCallback(tf.keras.callbacks.Callback):
         with open(current_epoch, "w") as f:
             f.write(f"{epoch+1}")
 
-        # Salva histórico em arquivo JSON
+        #Salva histórico em arquivo JSON
         history_path = os.path.join(self.log_dir, "history.json")
         with open(history_path, "w") as f:
             json.dump(self.history, f)
@@ -183,23 +190,36 @@ class TuneReporterCallback(tf.keras.callbacks.Callback):
                 include_optimizer=True,   # evita problemas com LR schedules customizados
                 #save_format="tf"          # força SavedModel (pasta)
             )
+        
+        self.metrics_to_report = metrics_to_report
 
     def on_train_end(self, logs=None):
+        from frog.metrics import NRMSE, R2, MAPE, MAXPE, MAE, MSE
+        from ray.train import get_context, report
 
-        # Salva histórico em arquivo JSON
-        history_path = os.path.join(self.log_dir, "history.json")
-        with open(history_path, "w") as f:
-            json.dump(self.history, f)
+        # Calcula métricas customizadas se os dados forem fornecidos
+        if self.metrics_dict is not None and self.test_X is not None and self.test_y is not None and self.fr_model is not None:
+            prediction = self.fr_model.predict(self.test_X)
+            for key, func_name in self.metrics_dict.items():
+                try:
+                    self.metrics_to_report[key] = float(eval(func_name)(self.test_y, prediction))
+                except Exception as e:
+                    print(f"[Warning] Falha ao calcular a métrica '{key}': {e}")
+
+        if self.kfold_iteration is not None:
+            self.metrics_to_report.update({ "kfold_iteration": self.kfold_iteration})
+
+        # Reporta para Ray Tune
+        if get_context():
+            report(self.metrics_to_report)
 
         if self.model_dir is not None:
                 save_model(
                 model=self.model,
                 filepath=self.model_dir+"/model.keras",
                 include_optimizer=True,   # evita problemas com LR schedules customizados
-                save_format="tf"          # força SavedModel (pasta)
+                #save_format="tf"          # força SavedModel (pasta)
             )
-
-
 import math
 
 class WarmupCosineDecay(tf.keras.callbacks.Callback):

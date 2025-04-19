@@ -11,6 +11,9 @@ from frog.metrics import NRMSE, R2, MAPE, MAE, MAXPE, MSE
 from pathlib import Path
 from ray.train import CheckpointConfig, SyncConfig
 
+from ray.tune.search.optuna import OptunaSearch
+from ray.tune.schedulers import ASHAScheduler
+
 import os
 import shutil
 
@@ -22,7 +25,8 @@ def create_clean_directory(dir_path, overwrite=False):
         dir_path (str): Caminho do diretório a ser criado/limpo.
     """
     if os.path.exists(dir_path) and overwrite:
-        shutil.rmtree(dir_path)  # Remove o diretório e todo o conteúdo
+        shutil.rmtree(dir_path)
+        #print(f'REMOVENDO O DIRETORIO: {dir_path}')  # Remove o diretório e todo o conteúdo
     os.makedirs(dir_path, exist_ok=True)  # Recria o diretório vazio
 
 class GridSearch:
@@ -140,7 +144,7 @@ class HyperOpt:
         restart_errored=False):
 
         import os
-        #os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = Path(hyperopt_path).resolve().__str__()
+        os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = Path(hyperopt_path).resolve().__str__()
 
         experiment_path = (Path(hyperopt_path).resolve() / Path(experiment_name)).__str__()
 
@@ -175,8 +179,9 @@ class HyperOpt:
         search_space=None, 
         other_params={}, 
         search_algorithm='HyperOptSearch', 
+        search_algorithm_kwargs = {},
         search_scheduler='CustomHyperBandForBOHB',
-        search_algorithm_kwargs={},
+        search_scheduler_kwargs = {},
         num_samples=1000, 
         metric='nrmse', 
         mode='min',
@@ -195,7 +200,7 @@ class HyperOpt:
         
         import os
         from pathlib import Path
-        #os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = Path(hyperopt_path).resolve().__str__()
+        os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = Path(hyperopt_path).resolve().__str__()
 
         # Exemplo de uso
         
@@ -213,7 +218,7 @@ class HyperOpt:
         with_resources = tune.with_resources(
             with_parameters, resources)
 
-        if search_algorithm == 'TuneBOHB':
+        if search_algorithm == 'TunsaeBOHB':
             from frog.utils import eval_dict
             search_algo = eval(search_algorithm)()
             #print('TUNEBOHBBBBBBBBBBBBBBBBBBB')
@@ -230,7 +235,7 @@ class HyperOpt:
                     search_alg=search_algo,
                     scheduler=scheduler,
                     num_samples=num_samples,
-                    reuse_actors=True,
+                    #reuse_actors=True,
                 ),
                 run_config=train.RunConfig(
                     #storage_path=Path(hyperopt_path).parent,
@@ -251,30 +256,31 @@ class HyperOpt:
         else:
 
             #search_algo = eval(search_algorithm)(metric=metric, mode=mode)
-            search_algo = eval(search_algorithm)(search_space, metric=metric, mode=mode)
-
+            search_alg = eval(search_algorithm)(**search_algorithm_kwargs)
+            scheduler =  eval(search_scheduler)(**search_scheduler_kwargs)
             tuner = tune.Tuner(
-                with_resources,
+                trainable=with_resources,
+                param_space=search_space,
                 tune_config=tune.TuneConfig(
                     num_samples=num_samples,
-                    search_alg=search_algo,
-                    reuse_actors=True,
+                    search_alg=search_alg,
+                    scheduler=scheduler,
+                    #reuse_actors=True,
+                    #metric=metric, 
+                    #mode=mode,
                 ),
                 run_config=RunConfig(
-                    #storage_path=Path(hyperopt_path).parent,
                     storage_path=Path(hyperopt_path).resolve(),
                     name=experiment_name,
-                    #name=Path(hyperopt_path).stem,
                     checkpoint_config=CheckpointConfig(
                         num_to_keep=1,
                         checkpoint_frequency=0,
-                       #checkpoint_at_end=True,
                     ),
                     log_to_file=True,
-                    #local_dir=Path(hyperopt_path).parent,
                 ),
                 #param_space=search_space
             )
+            
 
         results = tuner.fit()
 
