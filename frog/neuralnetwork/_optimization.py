@@ -65,7 +65,9 @@ def trainable(config, other_params={}):
     import ray
     from collections.abc import Iterable
     from frog.neuralnetwork import TuneReporterCallback
-
+    import gc
+    from tensorflow.keras import backend as K
+    
     def set_callbacks(other_params, tensorboard_logs_dir, model_dir, search_space):
         
         callbacks = []
@@ -274,6 +276,8 @@ def trainable(config, other_params={}):
         metrics.update({'kfold_iteration': fold_metrics['kfold_iteration']})
         with open(os.path.join(trial_dir, 'metrics.json'), "w") as f:
             json.dump(metrics, f)
+
+        del fr
     else:
         
         model_dir = os.path.join(trial_dir, "tensorflow_model")
@@ -380,5 +384,10 @@ def trainable(config, other_params={}):
                 #save_format="tf"          # força SavedModel (pasta)
             )
 
-    
+        del fr
+
+    del callbacks
+    gc.collect()
+    K.clear_session()
+
     return metrics

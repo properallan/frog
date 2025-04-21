@@ -10,6 +10,7 @@ from frog.schedulers import CustomHyperBandForBOHB
 from frog.metrics import NRMSE, R2, MAPE, MAE, MAXPE, MSE
 from pathlib import Path
 from ray.train import CheckpointConfig, SyncConfig
+import ray
 
 from ray.tune.search.optuna import OptunaSearch
 from ray.tune.schedulers import ASHAScheduler
@@ -146,6 +147,13 @@ class HyperOpt:
         import os
         os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = Path(hyperopt_path).resolve().__str__()
 
+        import random
+        import numpy as np
+        
+        random.seed(42)
+        np.random.seed(42)
+        ray.init(ignore_reinit_error=True)
+
         experiment_path = (Path(hyperopt_path).resolve() / Path(experiment_name)).__str__()
 
         with_parameters = tune.with_parameters(
@@ -202,6 +210,13 @@ class HyperOpt:
         from pathlib import Path
         os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = Path(hyperopt_path).resolve().__str__()
 
+        import random
+        import numpy as np
+        
+        random.seed(42)
+        np.random.seed(42)
+        ray.init(ignore_reinit_error=True)
+
         # Exemplo de uso
         
         experiment_path = (Path(hyperopt_path).resolve() / Path(experiment_name)).__str__()
@@ -235,7 +250,7 @@ class HyperOpt:
                     search_alg=search_algo,
                     scheduler=scheduler,
                     num_samples=num_samples,
-                    #reuse_actors=True,
+                    reuse_actors=True,
                 ),
                 run_config=train.RunConfig(
                     #storage_path=Path(hyperopt_path).parent,
@@ -265,7 +280,7 @@ class HyperOpt:
                     num_samples=num_samples,
                     search_alg=search_alg,
                     scheduler=scheduler,
-                    #reuse_actors=True,
+                    reuse_actors=True,
                     #metric=metric, 
                     #mode=mode,
                 ),
