@@ -31,8 +31,6 @@ def optimize(
     restart_errored: bool = typer.Option(False, "-s", "--restart-errored", help="Run errored trials from start"),
     ):
 
-    
-
     from frog.optimization import HyperOpt
     from frog.flow_reconstruction import FlowReconstruction
     from frog.metrics import NRMSE, R2, MAPE, MAXPE, MSE, MAE
