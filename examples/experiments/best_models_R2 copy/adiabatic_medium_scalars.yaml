@@ -1,0 +1,74 @@
+params:
+  N_LAYERS: 1
+  N_NEURONS: 219
+  ACTIVATION: sigmoid
+  WEIGHT_DECAY: 0.0078199199676584
+  DROPOUT: 0.0488069171341543
+  LEARNING_RATE: 0.0046291020433111
+  N_COMPONENTS_X: 3
+  N_COMPONENTS_y: 118
+  REC_LOSS_WEIGHT: 0.3062602839317208
+TRAINING_X: ../../datasets/adiabatic_medium/training_X.npz
+TRAINING_y: ../../datasets/adiabatic_medium/training_y.npz
+TEST_X: ../../datasets/adiabatic_medium/test_X.npz
+TEST_y: ../../datasets/adiabatic_medium/test_y.npz
+VALIDATION_X: ../../datasets/adiabatic_medium/validation_X.npz
+VALIDATION_y: ../../datasets/adiabatic_medium/validation_y.npz
+LF_VARIABLES:
+- bc_p0
+- bc_T0
+- divergence_angle
+HF_VARIABLES:
+- Pressure
+- Temperature
+- Mach
+regressor: NeuralNetwork(num_inputs=params['N_COMPONENTS_X'], num_outputs=params['N_COMPONENTS_y'],num_layers=params['N_LAYERS'],num_neurons=params['N_NEURONS'],activation=params['ACTIVATION'],
+  optimizer=tf.keras.optimizers.AdamW(learning_rate=params['LEARNING_RATE'], weight_decay=params['WEIGHT_DECAY']),
+  loss='pod_rec_mse', loss_kwargs=dict(rec_loss_weight=params['REC_LOSS_WEIGHT']),
+  dropout=params['DROPOUT'], random_state=42)
+X_rom: Pipeline([ ('centering', SliceMeanCentering()), ('scaler', MaxAbsScaler() ),
+  ('reducer', IdentityTransformer()) ])
+y_rom: Pipeline([ ('centering', SliceMeanCentering()), ('scaler', MaxAbsScaler() ),
+  ('reducer', IncrementalPCA(n_components=params['N_COMPONENTS_y'])) ])
+fit_kwargs:
+  regressor__epochs: 1000
+  regressor__batch_size: 8
+  regressor__validation_data: VALIDATION_DATA
+learning_rate_scheduler:
+- WarmupCosineDecay
+- EpochRangeReduceLROnPlateau
+- IncreaseLROnImprovement
+learning_rate_scheduler_kwargs:
+  WarmupCosineDecay:
+    base_lr: params['LEARNING_RATE']
+    total_epochs: 300
+    warmup_epochs: 50
+    final_lr_fraction: 0.1
+  EpochRangeReduceLROnPlateau:
+    monitor: val_loss
+    factor: 0.9
+    patience: 20
+    start_epoch: 301
+    end_epoch: 1000
+  IncreaseLROnImprovement:
+    monitor: val_loss
+    factor: 1.1
+    patience: 10
+    threshold: 0.001
+    start_epoch: 301
+    end_epoch: 1000
+metrics:
+  NRMSE: NRMSE
+  R2: R2
+early_stopping:
+  monitor: val_loss
+  mode: min
+  patience: 50
+  min_delta: 1.0e-08
+model_builder: FlowReconstruction
+kfold_cross_validation:
+  n_splits: 5
+  shuffle: true
+  random_state: 42
+save_path: /mnt/h/Workspace/Articles/nozzle_flow_reconstruction/experiments/best_models_R2/adiabatic_medium_scalars
+base_path: /mnt/h/Workspace/Articles/nozzle_flow_reconstruction/experiments/nn_optimization
