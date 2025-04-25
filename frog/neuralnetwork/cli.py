@@ -22,6 +22,13 @@ def create_clean_directory(dir_path, overwrite=False):
         shutil.rmtree(dir_path)  # Remove o diretório e todo o conteúdo
     os.makedirs(dir_path, exist_ok=True)  # Recria o diretório vazio
 
+from ._training import train as train_
+
+@app.command()
+def train(
+    config_file: Annotated[str, typer.Argument(help='YAML configuration file to run the training.')],
+):
+    return train_(config=config_file)
 
 @app.command()
 def optimize(

@@ -5,6 +5,28 @@ import tensorflow as tf
 from ray import train
 from tensorflow.keras.models import save_model
 
+class LRTensorBoardLogger(tf.keras.callbacks.Callback):
+    def __init__(self, log_dir):
+        super().__init__()
+        self.log_dir = log_dir
+        self.writer = tf.summary.create_file_writer(log_dir)
+        self.lrs = []
+
+    def on_epoch_end(self, epoch, logs=None):
+        # Get current learning rate (handles schedules too)
+        try:
+            lr = float(tf.keras.backend.get_value(self.model.optimizer.learning_rate))
+        except:
+            step = self.model.optimizer.iterations
+            lr = self.model.optimizer.learning_rate 
+            lr = float(tf.keras.backend.get_value(lr(step)))
+        self.lrs.append(lr)
+
+        # Log to TensorBoard
+        with self.writer.as_default():
+            tf.summary.scalar('lr', data=lr, step=epoch)
+            self.writer.flush()
+
 class PrintCallback(tf.keras.callbacks.Callback):
     """
     Callback para integração com Ray Tune e registro em TensorBoard durante o treinamento com Keras.
@@ -183,13 +205,13 @@ class TuneReporterCallback(tf.keras.callbacks.Callback):
         with open(history_path, "w") as f:
             json.dump(self.history, f)
 
-        if self.model_dir is not None:
-                save_model(
-                model=self.model,
-                filepath=self.model_dir+"/model.keras",
-                include_optimizer=True,   # evita problemas com LR schedules customizados
-                #save_format="tf"          # força SavedModel (pasta)
-            )
+        # if self.model_dir is not None:
+        #         save_model(
+        #         model=self.model,
+        #         filepath=self.model_dir+"/model.keras",
+        #         include_optimizer=True,   # evita problemas com LR schedules customizados
+        #         #save_format="tf"          # força SavedModel (pasta)
+        #     )
         
         self.metrics_to_report = metrics_to_report
 
@@ -213,13 +235,13 @@ class TuneReporterCallback(tf.keras.callbacks.Callback):
         if get_context():
             report(self.metrics_to_report)
 
-        if self.model_dir is not None:
-                save_model(
-                model=self.model,
-                filepath=self.model_dir+"/model.keras",
-                include_optimizer=True,   # evita problemas com LR schedules customizados
-                #save_format="tf"          # força SavedModel (pasta)
-            )
+        # if self.model_dir is not None:
+        #         save_model(
+        #         model=self.model,
+        #         filepath=self.model_dir+"/model.keras",
+        #         include_optimizer=True,   # evita problemas com LR schedules customizados
+        #         #save_format="tf"          # força SavedModel (pasta)
+        #     )
 import math
 
 class WarmupCosineDecay(tf.keras.callbacks.Callback):
