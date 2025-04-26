@@ -217,6 +217,7 @@ def train(config):
             with open(os.path.join(fr_model_dir, 'fr_model.pkl'), "wb") as f:
                 dill.dump(fr, f)  # Salva o modelo como pickle
 
+            fr.save(os.path.join(fr_model_dir, 'fr_model'))
             #from tensorflow.keras.models import save_model
         
             # if model_dir is not None:
@@ -318,6 +319,8 @@ def train(config):
         
         with open(os.path.join(fr_model_dir, 'fr_model.pkl'), "wb") as f:
             dill.dump(fr, f)  # Salva o modelo como pickle
+
+        fr.save(os.path.join(fr_model_dir, 'fr_model'))
             
         del fr
     else:
@@ -422,7 +425,7 @@ def train(config):
         with open(os.path.join(fr_model_dir, 'fr_model.pkl'), "wb") as f:
             dill.dump(fr, f)  # Salva o modelo como pickle
 
-
+        fr.save(os.path.join(fr_model_dir, 'fr_model'))
         #from tensorflow.keras.models import save_model
 
         # if model_dir is not None:

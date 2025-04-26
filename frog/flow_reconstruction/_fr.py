@@ -196,16 +196,44 @@ class FlowReconstruction(BaseEstimator, TransformerMixin):
         return y_out
     
     def save(self, path):
-        with open(path, 'wb') as f:
+        """
+        Salva o FlowReconstruction separadamente do modelo Keras.
+        """
+        # Salvar modelo keras
+        model_path = path + "_surrogate_model.h5"
+        self.surrogate.model.save(model_path)
+
+        # Antes de salvar o objeto, remover o keras model da surrogate
+        model_backup = self.surrogate.model
+        self.surrogate.model = None
+
+        # Salvar o objeto via pickle
+        with open(path + "_flow.pkl", 'wb') as f:
             pickle.dump(self, f)
 
+        # Restaurar o modelo em memória
+        self.surrogate.model = model_backup
+
+        print(f"FlowReconstruction salvo em {path}_flow.pkl e modelo salvo em {path}_surrogate_model.h5")
         return self
-    
-    def load(self, path):
-        with open(path, 'rb') as f:
-            self = pickle.load(f)
-        
-        return self
+
+    @staticmethod
+    def load(path):
+        """
+        Carrega o FlowReconstruction e seu modelo Keras.
+        """
+        from tensorflow import keras
+
+        # Carregar o objeto
+        with open(path + "_flow.pkl", 'rb') as f:
+            obj = pickle.load(f)
+
+        # Carregar o modelo keras
+        model_path = path + "_surrogate_model.h5"
+        obj.surrogate.model = keras.models.load_model(model_path, compile=False)
+
+        print(f"FlowReconstruction carregado de {path}_flow.pkl e modelo de {path}_surrogate_model.h5")
+        return obj
     
     def setattr(self, **kwargs):
         for key, value in kwargs.items():

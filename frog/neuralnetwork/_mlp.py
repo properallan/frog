@@ -233,3 +233,6 @@ class NeuralNetwork(MultiOutputMixin, RegressorMixin, BaseEstimator):
 
     def predict(self, X):
         return self.model.predict(X)
+
+    
+    
