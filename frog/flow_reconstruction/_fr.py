@@ -1,4 +1,5 @@
 import pickle
+import dill
 from typing import Union
 from pathlib import Path
 import numpy as np
@@ -199,20 +200,21 @@ class FlowReconstruction(BaseEstimator, TransformerMixin):
         """
         Salva o FlowReconstruction separadamente do modelo Keras.
         """
+        from pathlib import Path
         # Salvar modelo keras
-        model_path = path + "_surrogate_model.h5"
-        self.surrogate.model.save(model_path)
+        model_path = Path(path) / "fr_model_surrogate_model.h5"
+        self.surrogate.named_steps['regressor'].model.save(model_path)
 
         # Antes de salvar o objeto, remover o keras model da surrogate
-        model_backup = self.surrogate.model
-        self.surrogate.model = None
+        model_backup = self.surrogate.named_steps['regressor'].model
+        self.surrogate.named_steps['regressor'].model = None
 
         # Salvar o objeto via pickle
-        with open(path + "_flow.pkl", 'wb') as f:
-            pickle.dump(self, f)
+        with open(Path(path) / "fr_model_flow.pkl", 'wb') as f:
+            dill.dump(self, f)
 
         # Restaurar o modelo em memória
-        self.surrogate.model = model_backup
+        self.surrogate.named_steps['regressor'].model = model_backup
 
         print(f"FlowReconstruction salvo em {path}_flow.pkl e modelo salvo em {path}_surrogate_model.h5")
         return self
@@ -222,17 +224,18 @@ class FlowReconstruction(BaseEstimator, TransformerMixin):
         """
         Carrega o FlowReconstruction e seu modelo Keras.
         """
+        from pathlib import Path
         from tensorflow import keras
 
         # Carregar o objeto
-        with open(path + "_flow.pkl", 'rb') as f:
-            obj = pickle.load(f)
+        with open(Path(path) / "fr_model_flow.pkl", 'rb') as f:
+            obj = dill.load(f)
 
         # Carregar o modelo keras
-        model_path = path + "_surrogate_model.h5"
-        obj.surrogate.model = keras.models.load_model(model_path, compile=False)
+        model_path = Path(path) / "fr_model_surrogate_model.h5"
+        obj.surrogate.named_steps['regressor'].model = keras.models.load_model(model_path, compile=False)
 
-        print(f"FlowReconstruction carregado de {path}_flow.pkl e modelo de {path}_surrogate_model.h5")
+        print(f"FlowReconstruction carregado de {path}/fr_model_flow.pkl e modelo de {path}/fr_model_surrogate_model.h5")
         return obj
     
     def setattr(self, **kwargs):

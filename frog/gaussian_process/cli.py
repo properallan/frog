@@ -20,13 +20,15 @@ def train(
     from frog.normalization import PhysicalNormalizer, SliceMinMaxScaler, SliceMaxAbsScaler
     from frog.metrics import NRMSE, R2, MAPE, MAXPE, MAE, MSE
     from frog.transformers import IdentityTransformer, MeanCentering, SliceMeanCentering
+    from frog.utils import create_clean_directory
 
     # Marcar o tempo de início da execução
     start_time = time.time()
 
     with open(config_file, 'r') as f:
         config = yaml.safe_load(f)
-    
+    if 'save_results' in config.keys():
+        create_clean_directory(config['save_results'])
     params = config['params']
 
     params['regressor'] = params['regressor']
@@ -51,12 +53,21 @@ def train(
         from sklearn.model_selection import KFold
         import numpy as np
 
+        create_clean_directory(config['save_results'])
+
         kfold = KFold(**config['kfold_cross_validation'])  # Exemplo com 5 splits
 
         fold_metrics = []  # Lista para armazenar as métricas de cada fold
-        fold_models = []  # Lista para armazenar os modelos de cada fold
-
+        
         for fold_num, (train_index, val_index) in enumerate(kfold.split(training_X)):
+            start = time.perf_counter()
+            save_path = os.path.join(config['save_results'],f'fold_{k}')
+            create_clean_directory(save_path)
+
+            metrics_csv = os.path.join(save_path,'metrics.csv')
+            model_file = os.path.join(save_path,'fr_model.pkl')
+            config_file_copy = os.path.join(save_path,'config.yaml')
+
             X_train, X_val = training_X[train_index], training_X[val_index]
             y_train, y_val = training_y[train_index], training_y[val_index]
 
@@ -78,9 +89,35 @@ def train(
             metrics = {}
             for key, value in metrics_dict.items():
                 metrics[key] = eval(value)(y_val, prediction)
+            fold_metrics.append(metris)
 
-            fold_metrics.append(metrics)
-            fold_models.append(fr)
+            fold_metrics_df = pd.DataFrame(metrics, index=[0])
+            fold_metrics_df.to_csv(metrics_csv)
+
+            # Salvando o modelo com dill
+            with open(model_file, 'wb') as f:
+                dill.dump(fr, f)  # Salva o modelo completo, incluindo o regressor e o pipeline
+                print(f"Modelo salvo em {model_file}")
+            
+            shutil.copy(config_file, config_file_copy)
+
+            end = time.perf_counter()
+            training_time = end - start
+
+            with open(os.path.join(save_path, 'training_time.txt'), "w") as f:
+                f.write(str(training_time))
+
+
+        start = time.perf_counter()
+
+        save_path = os.path.join(config['save_results'])
+        create_clean_directory(save_path)
+
+        metrics_csv = os.path.join(save_path,'metrics.csv')
+        fold_metrics_csv = os.path.join(save_path,'fold_metrics.csv')
+        model_file = os.path.join(save_path,'fr_model.pkl')
+        config_file_copy = os.path.join(save_path,'config.yaml')
+
         # Calcular a média das métricas de todos os folds
         avg_metrics = {key: np.mean([fold[key] for fold in fold_metrics]) for key in fold_metrics[0]}
 
@@ -93,7 +130,36 @@ def train(
         final_metrics = {}
         for key, value in metrics_dict.items():
             final_metrics[key] = eval(value)(test_y, final_prediction)
+
+        fold_metrics_df = pd.DataFrame(fold_metrics)
+        fold_metrics_df.to_csv(fold_metrics_csv)
+
+        final_metrics_df = pd.DataFrame(final_metrics, index=[0])
+        final_metrics_df.to_csv(metrics_csv)
+
+        # Salvando o modelo com dill
+        with open(model_file, 'wb') as f:
+            dill.dump(fr_final, f)  # Salva o modelo completo, incluindo o regressor e o pipeline
+            print(f"Modelo salvo em {model_file}")
+
+        shutil.copy(config_file, config_file_copy)
+        
+        end = time.perf_counter()
+        training_time = end - start
+
+        with open(os.path.join(save_path, 'training_time.txt'), "w") as f:
+            f.write(str(training_times))
+        
+
+
     else:
+        start = time.perf_counter()
+        create_clean_directory(config['save_results'])
+
+        metrics_csv = os.path.join(save_path,'metrics.csv')
+        model_file = os.path.join(save_path,'fr_model.pkl')
+        config_file_copy = os.path.join(save_path,'config.yaml')
+
         regressor = eval(params['regressor'])
 
         surrogate = Pipeline([('regressor', regressor)])
@@ -111,9 +177,23 @@ def train(
         metrics = {}
         for key, value in metrics_dict.items():
             metrics[key] = eval(value)(ground_truth, prediction)
+
+        metrics_df = pd.DataFrame(metrics, index=[0])
+        metrics_df.to_csv(metrics_csv)
         
-        final_metrics = metrics
-        fr_final = fr
+        # Salvando o modelo com dill
+        with open(model_file, 'wb') as f:
+            dill.dump(fr, f)  # Salva o modelo completo, incluindo o regressor e o pipeline
+            print(f"Modelo salvo em {model_file}")
+
+        shutil.copy(config_file, config_file_copy)
+
+        end = time.perf_counter()
+        training_time = end - start
+
+        with open(os.path.join(save_path, 'training_time.txt'), "w") as f:
+            f.write(str(training_times[k]))
+
 
     # Marcar o tempo de fim da execução
     end_time = time.time()
@@ -147,8 +227,11 @@ def train(
 
                 # Salvando o modelo com dill
                 with open(model_file, 'wb') as f:
-                    dill.dump(fr, f)  # Salva o modelo completo, incluindo o regressor e o pipeline
+                    dill.dump(fr_model, f)  # Salva o modelo completo, incluindo o regressor e o pipeline
                     print(f"Modelo salvo em {model_file}")
+
+                with open(os.path.join(save_path, 'training_time.txt'), "w") as f:
+                    f.write(str(training_times[k]))
                 
                 shutil.copy(config_file, config_file_copy)
 
@@ -173,6 +256,8 @@ def train(
                 dill.dump(fr, f)  # Salva o modelo completo, incluindo o regressor e o pipeline
                 print(f"Modelo salvo em {model_file}")
             
+            with open(os.path.join(save_path, 'training_time.txt'), "w") as f:
+                f.write(str(training_times))
             shutil.copy(config_file, config_file_copy)
             
         else:
@@ -190,6 +275,9 @@ def train(
             with open(model_file, 'wb') as f:
                 dill.dump(fr, f)  # Salva o modelo completo, incluindo o regressor e o pipeline
                 print(f"Modelo salvo em {model_file}")
+
+            with open(os.path.join(save_path, 'training_time.txt'), "w") as f:
+                f.write(str(training_times))
 
             shutil.copy(config_file, config_file_copy)
     

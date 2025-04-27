@@ -7,6 +7,7 @@ def train(config):
     from frog.transformers import IdentityTransformer, MeanCentering, SliceMeanCentering
     from frog.normalization import PhysicalNormalizer, SliceMinMaxScaler, SliceMaxAbsScaler
     from ._callbacks import LRTensorBoardLogger
+    from frog.utils import create_clean_directory
     import json
 
     from sklearn.decomposition import TruncatedSVD, IncrementalPCA, PCA, KernelPCA, SparsePCA, MiniBatchSparsePCA
@@ -22,7 +23,9 @@ def train(config):
     import os
     import dill
     import pandas as pd
+    import time
 
+    
     def set_callbacks(other_params, tensorboard_logs_dir, params):
         
         callbacks = []
@@ -81,7 +84,7 @@ def train(config):
     save_path = other_params['save_path']
     
     trial_dir = save_path
-    
+    create_clean_directory(save_path)
     
     
     # Lambda para resolver path
@@ -123,7 +126,7 @@ def train(config):
 
         kfold_metrics = []
         for k, (train_index, test_index) in enumerate(kf.split(training_X)):
-            
+            start = time.perf_counter()
             X_train, X_test = training_X[train_index], training_X[test_index]
             y_train, y_test = training_y[train_index], training_y[test_index]
 
@@ -156,6 +159,7 @@ def train(config):
                     initial_epoch = int(f.readline().strip())    
                
             else:
+                create_clean_directory(model_dir)
                 print("Não foi possível restaurar o modelo")
                 os.makedirs(model_dir, exist_ok=True)
                 os.makedirs(fr_model_dir, exist_ok=True)
@@ -214,10 +218,15 @@ def train(config):
                  history = json.load(f)
    
             
-            with open(os.path.join(fr_model_dir, 'fr_model.pkl'), "wb") as f:
-                dill.dump(fr, f)  # Salva o modelo como pickle
+            # with open(os.path.join(fr_model_dir, 'fr_model.pkl'), "wb") as f:
+            #     dill.dump(fr, f)  # Salva o modelo como pickle
 
-            fr.save(os.path.join(fr_model_dir, 'fr_model'))
+            fr.save(os.path.join(fr_model_dir, 'fr_model', 'fr_model'))
+
+            end = time.perf_counter()
+            training_time = end - start
+            with open(os.path.join(fr_model_dir, 'training_time.txt'), "w") as f:
+                f.write(str(training_time))
             #from tensorflow.keras.models import save_model
         
             # if model_dir is not None:
@@ -228,6 +237,7 @@ def train(config):
             #         #save_format="tf"          # força SavedModel (pasta)
             #     )
 
+        start = time.perf_counter()
 
         X_train, X_test = training_X, test_X
         y_train, y_test = training_y, test_y
@@ -260,6 +270,7 @@ def train(config):
                 initial_epoch = int(f.readline().strip())    
             
         else:
+            create_clean_directory(model_dir)
             print("Não foi possível restaurar o modelo")
             os.makedirs(model_dir, exist_ok=True)
             os.makedirs(fr_model_dir, exist_ok=True)
@@ -317,14 +328,19 @@ def train(config):
         with open(os.path.join(tensorboard_logs_dir, 'history.json'), "r") as f:
                 history = json.load(f)
         
-        with open(os.path.join(fr_model_dir, 'fr_model.pkl'), "wb") as f:
-            dill.dump(fr, f)  # Salva o modelo como pickle
+        # with open(os.path.join(fr_model_dir, 'fr_model.pkl'), "wb") as f:
+        #     dill.dump(fr, f)  # Salva o modelo como pickle
 
-        fr.save(os.path.join(fr_model_dir, 'fr_model'))
+        fr.save(os.path.join(fr_model_dir, 'fr_model', 'fr_model'))
+
+        end = time.perf_counter()
+        training_time = end - start
+        with open(os.path.join(fr_model_dir, 'training_time.txt'), "w") as f:
+            f.write(str(training_time))  # Salva o modelo como pickle
             
         del fr
     else:
-        
+        start = time.perf_counter()
         model_dir = os.path.join(trial_dir, "tensorflow_model")
         tensorboard_logs_dir = os.path.join(trial_dir, "tensorboard_logs")
         fr_model_dir = os.path.join(trial_dir)
@@ -349,6 +365,7 @@ def train(config):
                 initial_epoch = int(f.readline().strip())    
                 
         else:
+            create_clean_directory(model_dir)
             print("Não foi possível restaurar o modelo")
             os.makedirs(model_dir, exist_ok=True)
             os.makedirs(fr_model_dir, exist_ok=True)
@@ -422,10 +439,15 @@ def train(config):
         
         metrics.update({k:v[-1] if isinstance(v, Iterable) else 0 for k,v in history.items()})
        
-        with open(os.path.join(fr_model_dir, 'fr_model.pkl'), "wb") as f:
-            dill.dump(fr, f)  # Salva o modelo como pickle
+        # with open(os.path.join(fr_model_dir, 'fr_model.pkl'), "wb") as f:
+        #     dill.dump(fr, f)  # Salva o modelo como pickle
 
-        fr.save(os.path.join(fr_model_dir, 'fr_model'))
+        fr.save(os.path.join(fr_model_dir, 'fr_model', 'fr_model'))
+
+        end = time.perf_counter()
+        training_time = end - start
+        with open(os.path.join(fr_model_dir, 'training_time.txt'), "w") as f:
+            f.write(str(training_time))
         #from tensorflow.keras.models import save_model
 
         # if model_dir is not None:

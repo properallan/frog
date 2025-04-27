@@ -1,4 +1,4 @@
-def create_clean_directory(dir_path, overwrite=False):
+def create_clean_directory(dir_path, overwrite=True):
     """
     Cria um diretório. Se já existir, remove todo o conteúdo e recria do zero.
 
@@ -6,6 +6,7 @@ def create_clean_directory(dir_path, overwrite=False):
         dir_path (str): Caminho do diretório a ser criado/limpo.
     """
     import os
+    import shutil
     
     if os.path.exists(dir_path) and overwrite:
         shutil.rmtree(dir_path)
