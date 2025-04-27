@@ -106,10 +106,21 @@ class FlowReconstruction(BaseEstimator, TransformerMixin):
         self.fit(X, y, **kwargs)
         return self.transform(X, y)
     
-    def transform(self, X, y=None):
+    def transform(self, X, y=None, **kwargs):
         X_in = self.X_rom.transform(X)
-        y_out = self.surrogate.predict(X_in)
-        y_out = self.y_rom.inverse_transform(y_out)
+        y_out = self.surrogate.predict(X_in, **kwargs)
+
+        if 'return_std' in kwargs.keys():
+            from copy import copy
+
+            out = copy(y_out)
+            y_out = out[0]
+            std = out[1]
+        
+            y_out = self.y_rom.inverse_transform(y_out)
+            std = self.y_rom.inverse_transform(std)
+        else:
+            y_out = self.y_rom.inverse_transform(y_out)
 
         if self.y_index is not None:
             y_out = IndexedArray(
@@ -117,7 +128,15 @@ class FlowReconstruction(BaseEstimator, TransformerMixin):
                 index=self.y_index, 
                 doe_index=None,
                 doe_file=None)
+            if 'return_std' in kwargs.keys():
+                std = IndexedArray(
+                    input_array=std, 
+                    index=self.y_index, 
+                    doe_index=None,
+                    doe_file=None)
             
+        if 'return_std' in kwargs.keys():
+            y_out = (y_out, std)
         return y_out
 
     def inverse_transform(self, y):
@@ -189,11 +208,9 @@ class FlowReconstruction(BaseEstimator, TransformerMixin):
 
         self.VALIDATION_DATA = (self.snapshots_X_validation, self.snapshots_y_validation)
 
-    def predict(self, X):
-        X_in = self.X_rom.transform(X)
-        y_out = self.surrogate.predict(X_in)
-        y_out = self.y_rom.inverse_transform(y_out)
-        
+    def predict(self, X, **kwargs):
+        y_out = self.transform(X, **kwargs)
+
         return y_out
     
     def save(self, path):

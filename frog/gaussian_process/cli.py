@@ -22,13 +22,17 @@ def train(
     from frog.transformers import IdentityTransformer, MeanCentering, SliceMeanCentering
     from frog.utils import create_clean_directory
 
+    import os
+    import dill
+    import os
+    import pandas as pd
+    import shutil
     # Marcar o tempo de início da execução
     start_time = time.time()
 
     with open(config_file, 'r') as f:
         config = yaml.safe_load(f)
-    if 'save_results' in config.keys():
-        create_clean_directory(config['save_results'])
+
     params = config['params']
 
     params['regressor'] = params['regressor']
@@ -59,7 +63,7 @@ def train(
 
         fold_metrics = []  # Lista para armazenar as métricas de cada fold
         
-        for fold_num, (train_index, val_index) in enumerate(kfold.split(training_X)):
+        for k, (train_index, val_index) in enumerate(kfold.split(training_X)):
             start = time.perf_counter()
             save_path = os.path.join(config['save_results'],f'fold_{k}')
             create_clean_directory(save_path)
@@ -68,8 +72,8 @@ def train(
             model_file = os.path.join(save_path,'fr_model.pkl')
             config_file_copy = os.path.join(save_path,'config.yaml')
 
-            X_train, X_val = training_X[train_index], training_X[val_index]
-            y_train, y_val = training_y[train_index], training_y[val_index]
+            X_train, X_test = training_X[train_index], training_X[val_index]
+            y_train, y_test = training_y[train_index], training_y[val_index]
 
             regressor = eval(params['regressor'])
 
@@ -82,14 +86,14 @@ def train(
             fr.fit(X=X_train, y=y_train)
 
             # Fazer a previsão
-            prediction = fr.predict(X_val)
+            prediction = fr.predict(X_test)
 
             # Calcular as métricas (exemplo com MSE)
             metrics_dict = params['metrics']
             metrics = {}
             for key, value in metrics_dict.items():
-                metrics[key] = eval(value)(y_val, prediction)
-            fold_metrics.append(metris)
+                metrics[key] = eval(value)(y_test, prediction)
+            fold_metrics.append(metrics)
 
             fold_metrics_df = pd.DataFrame(metrics, index=[0])
             fold_metrics_df.to_csv(metrics_csv)
@@ -111,7 +115,6 @@ def train(
         start = time.perf_counter()
 
         save_path = os.path.join(config['save_results'])
-        create_clean_directory(save_path)
 
         metrics_csv = os.path.join(save_path,'metrics.csv')
         fold_metrics_csv = os.path.join(save_path,'fold_metrics.csv')
@@ -148,10 +151,8 @@ def train(
         training_time = end - start
 
         with open(os.path.join(save_path, 'training_time.txt'), "w") as f:
-            f.write(str(training_times))
-        
-
-
+            f.write(str(training_time))
+    
     else:
         start = time.perf_counter()
         create_clean_directory(config['save_results'])
@@ -192,7 +193,7 @@ def train(
         training_time = end - start
 
         with open(os.path.join(save_path, 'training_time.txt'), "w") as f:
-            f.write(str(training_times[k]))
+            f.write(str(training_time))
 
 
     # Marcar o tempo de fim da execução
@@ -201,88 +202,7 @@ def train(
     # Calcular e exibir o tempo total de execução
     elapsed_time = end_time - start_time
     print(f'Tempo de execução: {elapsed_time:.2f} segundos')
-
-
-    if 'save_results' in config.keys():
-        import dill
-        import os
-        import pandas as pd
-        from frog.utils import create_clean_directory
-        import shutil
-
-        if 'kfold_cross_validation' in config.keys():
-        
-            create_clean_directory(config['save_results'])
-
-            for k, (fr_model, metrics) in enumerate(zip(fold_models, fold_metrics)):
-                save_path = os.path.join(config['save_results'],f'fold_{k}')
-                create_clean_directory(save_path)
-
-                metrics_csv = os.path.join(save_path,'metrics.csv')
-                model_file = os.path.join(save_path,'fr_model.pkl')
-                config_file_copy = os.path.join(save_path,'config.yaml')
-
-                fold_metrics_df = pd.DataFrame(metrics, index=[0])
-                fold_metrics_df.to_csv(metrics_csv)
-
-                # Salvando o modelo com dill
-                with open(model_file, 'wb') as f:
-                    dill.dump(fr_model, f)  # Salva o modelo completo, incluindo o regressor e o pipeline
-                    print(f"Modelo salvo em {model_file}")
-
-                with open(os.path.join(save_path, 'training_time.txt'), "w") as f:
-                    f.write(str(training_times[k]))
-                
-                shutil.copy(config_file, config_file_copy)
-
-            save_path = os.path.join(config['save_results'])
-
-            metrics_csv = os.path.join(save_path,'metrics.csv')
-            fold_metrics_csv = os.path.join(save_path,'fold_metrics.csv')
-            model_file = os.path.join(save_path,'fr_model.pkl')
-            config_file_copy = os.path.join(save_path,'config.yaml')
-
-            for i, metrics in enumerate(fold_metrics):
-                metrics['fold'] = i  # Adiciona o índice como chave 'fold'
-
-            fold_metrics_df = pd.DataFrame(fold_metrics)
-            fold_metrics_df.to_csv(fold_metrics_csv)
-
-            final_metrics_df = pd.DataFrame(final_metrics, index=[0])
-            final_metrics_df.to_csv(metrics_csv)
-
-            # Salvando o modelo com dill
-            with open(model_file, 'wb') as f:
-                dill.dump(fr, f)  # Salva o modelo completo, incluindo o regressor e o pipeline
-                print(f"Modelo salvo em {model_file}")
-            
-            with open(os.path.join(save_path, 'training_time.txt'), "w") as f:
-                f.write(str(training_times))
-            shutil.copy(config_file, config_file_copy)
-            
-        else:
-
-            create_clean_directory(config['save_results'])
-
-            metrics_csv = os.path.join(config['save_results'],'metrics.csv')
-            model_file = os.path.join(config['save_results'],'fr_model.pkl')
-            config_file_copy = os.path.join(config['save_results'],'config.yaml')
-            
-            metrics_df = pd.DataFrame(metrics, index=[0])
-            metrics_df.to_csv(metrics_csv)
-            
-            # Salvando o modelo com dill
-            with open(model_file, 'wb') as f:
-                dill.dump(fr, f)  # Salva o modelo completo, incluindo o regressor e o pipeline
-                print(f"Modelo salvo em {model_file}")
-
-            with open(os.path.join(save_path, 'training_time.txt'), "w") as f:
-                f.write(str(training_times))
-
-            shutil.copy(config_file, config_file_copy)
     
-    # Exibir os resultados das métricas
-    print(final_metrics)
     return final_metrics, fr_final
 
 if __name__ == "__main__":
