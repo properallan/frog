@@ -1,0 +1,27 @@
+fr_model_builder: FlowReconstruction
+save_results: ./gp_adiabatic_medium_scalars/
+params:
+  HF_VARIABLES:
+  - Pressure
+  - Temperature
+  - Mach
+  LF_VARIABLES:
+  - bc_p0
+  - bc_T0
+  - divergence_angle
+  TEST_X: ../../datasets/adiabatic_medium/test_X.npz
+  TEST_y: ../../datasets/adiabatic_medium/test_y.npz
+  TRAINING_X: ../../datasets/adiabatic_medium/training_X.npz
+  TRAINING_y: ../../datasets/adiabatic_medium/training_y.npz
+  N_COMPONENTS_X: 3
+  N_COMPONENTS_y: 118
+  metrics:
+    NRMSE: NRMSE
+    R2: R2
+  regressor: GaussianProcessRegressor(kernel=ConstantKernel(1.0, (1e-3, 1e3)) * RBF(length_scale=[1.0]*params['N_COMPONENTS_X'], length_scale_bounds=(1e-9, 1e9)), n_restarts_optimizer=10, normalize_y=False,  random_state=42)
+  X_rom: Pipeline([ ('centering', SliceMeanCentering()), ('scaler', MaxAbsScaler() ), ('reducer', IdentityTransformer()) ])
+  y_rom: Pipeline([ ('centering', SliceMeanCentering()), ('scaler', MaxAbsScaler() ), ('reducer', IncrementalPCA(n_components=params['N_COMPONENTS_y'])) ])
+kfold_cross_validation:
+  n_splits: 5
+  shuffle: True
+  random_state: 42
