@@ -1,0 +1,198 @@
+.
+├── README.md
+├── build
+│   ├── bdist.linux-x86_64
+│   └── lib
+│       └── frog
+│           ├── __init__.py
+│           └── __main__.py
+├── environment.yaml
+├── examples
+│   ├── dask_pipeline.ipynb
+│   ├── doe_1000
+│   ├── doe_200
+│   │   └── doe_config.yaml
+│   ├── doe_500
+│   ├── doe_config.yaml
+│   ├── doe_lhs.ipynb
+│   ├── doe_preprocess_1D.yaml
+│   ├── doe_preprocess_2D.yaml
+│   ├── experimental_planning.ipynb
+│   ├── experiments
+│   │   ├── best_models_NRMSE
+│   │   │   ├── Tw_large_fields.yaml
+│   │   │   ├── Tw_large_scalars.yaml
+│   │   │   ├── Tw_medium_fields.yaml
+│   │   │   ├── Tw_medium_scalars.yaml
+│   │   │   ├── Tw_small_fields.yaml
+│   │   │   ├── Tw_small_scalars.yaml
+│   │   │   ├── adiabatic_large_fields.yaml
+│   │   │   ├── adiabatic_large_scalars.yaml
+│   │   │   ├── adiabatic_medium_fields.yaml
+│   │   │   ├── adiabatic_medium_scalars.yaml
+│   │   │   ├── adiabatic_small_fields.yaml
+│   │   │   └── adiabatic_small_scalars.yaml
+│   │   ├── best_models_NRMSE copy
+│   │   │   ├── Tw_large_fields.yaml
+│   │   │   ├── Tw_large_scalars.yaml
+│   │   │   ├── Tw_medium_fields.yaml
+│   │   │   ├── Tw_medium_scalars.yaml
+│   │   │   ├── Tw_small_fields.yaml
+│   │   │   ├── Tw_small_scalars
+│   │   │   │   └── fold_0
+│   │   │   │       ├── tensorboard_logs
+│   │   │   │       │   ├── current_epoch.txt
+│   │   │   │       │   ├── events.out.tfevents.1745610872.DESKTOP-TBK59IC.424366.4.v2
+│   │   │   │       │   ├── events.out.tfevents.1745610872.DESKTOP-TBK59IC.424366.5.v2
+│   │   │   │       │   └── history.json
+│   │   │   │       └── tensorflow_model
+│   │   │   ├── Tw_small_scalars.yaml
+│   │   │   ├── adiabatic_large_fields.yaml
+│   │   │   ├── adiabatic_large_scalars.yaml
+│   │   │   ├── adiabatic_medium_fields.yaml
+│   │   │   ├── adiabatic_medium_scalars.yaml
+│   │   │   ├── adiabatic_small_fields.yaml
+│   │   │   └── adiabatic_small_scalars.yaml
+│   │   ├── best_models_R2
+│   │   │   ├── Tw_large_fields.yaml
+│   │   │   ├── Tw_large_scalars.yaml
+│   │   │   ├── Tw_medium_fields.yaml
+│   │   │   ├── Tw_medium_scalars.yaml
+│   │   │   ├── Tw_small_fields.yaml
+│   │   │   ├── Tw_small_scalars.yaml
+│   │   │   ├── adiabatic_large_fields.yaml
+│   │   │   ├── adiabatic_large_scalars.yaml
+│   │   │   ├── adiabatic_medium_fields.yaml
+│   │   │   ├── adiabatic_medium_scalars.yaml
+│   │   │   ├── adiabatic_small_fields.yaml
+│   │   │   └── adiabatic_small_scalars.yaml
+│   │   ├── best_models_R2 copy
+│   │   │   ├── Tw_large_fields.yaml
+│   │   │   ├── Tw_large_scalars.yaml
+│   │   │   ├── Tw_medium_fields.yaml
+│   │   │   ├── Tw_medium_scalars.yaml
+│   │   │   ├── Tw_small_fields.yaml
+│   │   │   ├── Tw_small_scalars.yaml
+│   │   │   ├── adiabatic_large_fields
+│   │   │   │   └── fold_0
+│   │   │   │       ├── tensorboard_logs
+│   │   │   │       │   ├── current_epoch.txt
+│   │   │   │       │   ├── events.out.tfevents.1745610664.DESKTOP-TBK59IC.424366.2.v2
+│   │   │   │       │   ├── events.out.tfevents.1745610664.DESKTOP-TBK59IC.424366.3.v2
+│   │   │   │       │   └── history.json
+│   │   │   │       └── tensorflow_model
+│   │   │   ├── adiabatic_large_fields.yaml
+│   │   │   ├── adiabatic_large_scalars.yaml
+│   │   │   ├── adiabatic_medium_fields.yaml
+│   │   │   ├── adiabatic_medium_scalars.yaml
+│   │   │   ├── adiabatic_small_fields.yaml
+│   │   │   └── adiabatic_small_scalars.yaml
+│   │   ├── gaussian_process_kfold_to_run
+│   │   │   ├── gp_Tw_large_fields.yaml
+│   │   │   ├── gp_Tw_large_scalars.yaml
+│   │   │   ├── gp_Tw_medium_fields.yaml
+│   │   │   ├── gp_Tw_medium_scalars.yaml
+│   │   │   ├── gp_Tw_small_fields.yaml
+│   │   │   ├── gp_Tw_small_scalars.yaml
+│   │   │   ├── gp_adiabatic_large_fields.yaml
+│   │   │   ├── gp_adiabatic_large_scalars.yaml
+│   │   │   ├── gp_adiabatic_medium_fields.yaml
+│   │   │   ├── gp_adiabatic_medium_scalars.yaml
+│   │   │   ├── gp_adiabatic_small_fields.yaml
+│   │   │   ├── gp_adiabatic_small_scalars.yaml
+│   │   │   └── run_gp_sequential.py
+│   │   └── retrain_best_models.py
+│   ├── forced_burgers.ipynb
+│   ├── nozzle_heat_transfer.ipynb
+│   ├── open_lazy_datase.ipynb
+│   ├── other_variables.yaml
+│   ├── pipeline.ipynb
+│   ├── runner.py
+│   ├── variables.yaml
+│   ├── with_pipeline.ipynb
+│   └── without_pipeline.ipynb
+├── frog
+│   ├── __init__.py
+│   ├── __main__.py
+│   ├── datahandler
+│   │   ├── __init__.py
+│   │   ├── _array.py
+│   │   ├── _hdf5.py
+│   │   ├── _npz.py
+│   │   ├── _slice_data.py
+│   │   ├── _snapshots.py
+│   │   └── cli.py
+│   ├── dimensionality_reduction
+│   │   ├── __init__.py
+│   │   ├── _trainable.py
+│   │   └── cli.py
+│   ├── doe
+│   │   ├── __init__.py
+│   │   ├── _doe.py
+│   │   ├── _lhs.py
+│   │   └── cli.py
+│   ├── flow_reconstruction
+│   │   ├── __init__.py
+│   │   └── _fr.py
+│   ├── gaussian_process
+│   │   ├── __init__.py
+│   │   ├── cli.py
+│   │   └── cli_wrong.py
+│   ├── loss
+│   │   ├── __init__.py
+│   │   └── _custom.py
+│   ├── metrics
+│   │   ├── __init__.py
+│   │   └── _metrics.py
+│   ├── neuralnetwork
+│   │   ├── __init__.py
+│   │   ├── _callbacks.py
+│   │   ├── _mlp.py
+│   │   ├── _optimization.py
+│   │   ├── _training.py
+│   │   └── cli.py
+│   ├── normalization
+│   │   ├── __init__.py
+│   │   └── _normalization.py
+│   ├── optimization
+│   │   ├── __init__.py
+│   │   ├── _get_best_models.py
+│   │   └── _hyperparameters.py
+│   ├── plot
+│   │   ├── __init__.py
+│   │   └── _plot.py
+│   ├── results
+│   │   ├── __init__.py
+│   │   └── _hyperparameter_optimization.py
+│   ├── rom
+│   │   ├── __init__.py
+│   │   └── _svd.py
+│   ├── schedulers
+│   │   ├── __init__.py
+│   │   └── custom_hyperband_for_bohb.py
+│   ├── transformers
+│   │   ├── __init__.py
+│   │   ├── _centering.py
+│   │   └── _identity.py
+│   └── utils
+│       ├── __init__.py
+│       ├── _dictionary_evaluator.py
+│       ├── _file_operations.py
+│       └── _function_loader.py
+├── frog.egg-info
+│   ├── PKG-INFO
+│   ├── SOURCES.txt
+│   ├── dependency_links.txt
+│   ├── entry_points.txt
+│   └── top_level.txt
+├── frog.yaml
+├── new_requirements.txt
+├── requirements.22082025.txt
+├── requirements.txt
+├── requirements.txt.bak
+├── requirements_2.txt
+├── requirements_old_faster.txt
+├── setup.py
+└── tree
+
+41 directories, 155 files

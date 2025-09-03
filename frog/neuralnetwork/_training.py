@@ -221,12 +221,14 @@ def train(config):
             # with open(os.path.join(fr_model_dir, 'fr_model.pkl'), "wb") as f:
             #     dill.dump(fr, f)  # Salva o modelo como pickle
 
-            fr.save(os.path.join(fr_model_dir, 'fr_model', 'fr_model'))
+            fr.save(os.path.join(fr_model_dir, 'fr_model'))
 
             end = time.perf_counter()
             training_time = end - start
             with open(os.path.join(fr_model_dir, 'training_time.txt'), "w") as f:
                 f.write(str(training_time))
+
+            del fr
             #from tensorflow.keras.models import save_model
         
             # if model_dir is not None:
@@ -239,10 +241,30 @@ def train(config):
 
         start = time.perf_counter()
 
-        X_train, X_test = training_X, test_X
-        y_train, y_test = training_y, test_y
+        # Carregar dados
+        training_X = DataHandlerNpz(resolve_path(other_params['TRAINING_X']))
+        test_X = DataHandlerNpz(resolve_path(other_params['TEST_X']))
+        validation_X = DataHandlerNpz(resolve_path(other_params['VALIDATION_X']))
 
-        
+        training_y = DataHandlerNpz(resolve_path(other_params['TRAINING_y']))
+        test_y = DataHandlerNpz(resolve_path(other_params['TEST_y']))
+        validation_y = DataHandlerNpz(resolve_path(other_params['VALIDATION_y']))
+
+        # Filtrar variáveis
+        training_X = training_X[other_params['LF_VARIABLES']]
+        test_X = test_X[other_params['LF_VARIABLES']]
+        validation_X = validation_X[other_params['LF_VARIABLES']]
+
+        training_y = training_y[other_params['HF_VARIABLES']]
+        test_y = test_y[other_params['HF_VARIABLES']]
+        validation_y = validation_y[other_params['HF_VARIABLES']]
+
+        VALIDATION_DATA = (validation_X, validation_y)
+
+        X_rom = eval(other_params['X_rom'])
+        y_rom = eval(other_params['y_rom'])
+
+
         model_dir = os.path.join(trial_dir, "tensorflow_model")
         tensorboard_logs_dir = os.path.join(trial_dir, "tensorboard_logs")
         fr_model_dir = os.path.join(trial_dir)
@@ -293,8 +315,8 @@ def train(config):
         callbacks.append(TuneReporterCallback(
                 log_dir=tensorboard_logs_dir,
                 fr_model=fr,
-                test_X=X_test,
-                test_y=y_test,
+                test_X=test_X,
+                test_y=test_y,
                 metrics_dict=metrics_dict, 
                 model_dir=model_dir,
                 kfold_iteration=k
@@ -312,15 +334,14 @@ def train(config):
         fit_kwargs.update(other_params['fit_kwargs'])
         fit_kwargs.update({'regressor__initial_epoch': initial_epoch})
         
-        fr.fit(X=X_train, y=y_train, **fit_kwargs)
-        prediction = fr.predict(X_test)
-        ground_truth = y_test
+        fr.fit(X=training_X, y=training_y, **fit_kwargs)
+        prediction = fr.predict(test_X)
+        ground_truth = test_y
 
         metrics = {}
         for key, value in metrics_dict.items():
             metrics[key] = float(eval(value)(ground_truth, prediction))
                 
-
         pd.DataFrame([metrics]).to_csv(os.path.join(trial_dir, 'metrics.csv'))
 
         pd.DataFrame(kfold_metrics).to_csv(os.path.join(trial_dir, 'fold_metrics.csv'))
@@ -331,7 +352,7 @@ def train(config):
         # with open(os.path.join(fr_model_dir, 'fr_model.pkl'), "wb") as f:
         #     dill.dump(fr, f)  # Salva o modelo como pickle
 
-        fr.save(os.path.join(fr_model_dir, 'fr_model', 'fr_model'))
+        fr.save(os.path.join(fr_model_dir, 'fr_model'))
 
         end = time.perf_counter()
         training_time = end - start
@@ -442,7 +463,7 @@ def train(config):
         # with open(os.path.join(fr_model_dir, 'fr_model.pkl'), "wb") as f:
         #     dill.dump(fr, f)  # Salva o modelo como pickle
 
-        fr.save(os.path.join(fr_model_dir, 'fr_model', 'fr_model'))
+        fr.save(os.path.join(fr_model_dir, 'fr_model'))
 
         end = time.perf_counter()
         training_time = end - start

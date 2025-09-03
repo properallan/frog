@@ -107,12 +107,15 @@ class FlowReconstruction(BaseEstimator, TransformerMixin):
         return self.transform(X, y)
     
     def transform(self, X, y=None, **kwargs):
+        from copy import copy
+
         X_in = self.X_rom.transform(X)
         y_out = self.surrogate.predict(X_in, **kwargs)
 
-        if 'return_std' in kwargs.keys():
-            from copy import copy
+        self.X_latent = copy(X_in)
+        self.y_latent = copy(y_out)
 
+        if 'return_std' in kwargs.keys():
             out = copy(y_out)
             y_out = out[0]
             std = out[1]
@@ -137,6 +140,7 @@ class FlowReconstruction(BaseEstimator, TransformerMixin):
             
         if 'return_std' in kwargs.keys():
             y_out = (y_out, std)
+
         return y_out
 
     def inverse_transform(self, y):
