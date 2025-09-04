@@ -1,4 +1,3 @@
-import pickle
 import dill
 from typing import Union
 from pathlib import Path
@@ -20,46 +19,27 @@ from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
 
 def load(path):
     with open(path, 'rb') as f:
-        fr = pickle.load(f)
-    return fr
+        return dill.load(f)  # em vez de pickle.load
 
-class FR:
-    def __init__(self, X_rom=None, y_rom=None, surrogate=None, surrogate_kwargs : dict = {}, load_path : str = None, **kwargs):
-        self.X_rom = X_rom
-        self.y_rom = y_rom
-        self.surrogate = surrogate
-        self.surrogate_kwargs = surrogate_kwargs
-
-        if X_rom is None and y_rom is None and surrogate is None and surrogate_kwargs == {}:
-            self.load(load_path)
-        
-        self.setattr(**kwargs)
-
-    def fit(self, X, y, **kwargs):
-        fit_kwargs = {**self.surrogate_kwargs, **kwargs}
-        print('Performing ROM fit on X data')
-        X = self.X_rom.fit_transform(X)
-        print('Performing ROM fit on y data')
-        y = self.y_rom.fit_transform(y)
-
-        if 'regressor__validation_data' in fit_kwargs.keys():
-            if fit_kwargs['regressor__validation_data'] is not None:
-                X_validation = fit_kwargs['regressor__validation_data'][0]
-                y_validation = fit_kwargs['regressor__validation_data'][1]
-                print('Performing ROM fit on X validation data')
-                X_validation = self.X_rom.transform(X_validation)
-                print('Performing ROM fit on y validation data')
-                y_validation = self.y_rom.transform(y_validation)
-                fit_kwargs['regressor__validation_data'] = (X_validation, y_validation)
-                
-        print('Performing surrogate model fit')
-        self.surrogate.fit(
-            X, 
-            y, 
-            **fit_kwargs
-        )
-
-        return self
+def _find_keras_model(holder):
+    """
+    Tenta achar um modelo Keras dentro de um objeto que pode ser
+    um Pipeline, um estimador simples, etc.
+    Retorna (obj_ref, attr_name) se achar (para setar None/restaurar),
+    e o próprio model. Caso contrário, retorna (None, None, None).
+    """
+    try:
+        # Caso Pipeline com passo 'regressor'
+        if hasattr(holder, "named_steps") and 'regressor' in holder.named_steps:
+            reg = holder.named_steps['regressor']
+            if hasattr(reg, 'model') and reg.model is not None:
+                return (reg, 'model', reg.model)
+        # Caso o próprio holder tenha .model
+        if hasattr(holder, 'model') and holder.model is not None:
+            return (holder, 'model', holder.model)
+    except Exception:
+        pass
+    return (None, None, None)
 
 class FlowReconstruction(BaseEstimator, TransformerMixin):
     def __init__(self, X_rom=None, y_rom=None, surrogate=None, surrogate_kwargs : dict = {}, **kwargs):
@@ -218,248 +198,68 @@ class FlowReconstruction(BaseEstimator, TransformerMixin):
         return y_out
     
     def save(self, path):
-        """
-        Salva o FlowReconstruction separadamente do modelo Keras.
-        """
         from pathlib import Path
-        # Salvar modelo keras
-        model_path = Path(path) / "fr_model_surrogate_model.h5"
-        self.surrogate.named_steps['regressor'].model.save(model_path)
+        path = Path(path)
+        path.mkdir(parents=True, exist_ok=True)
 
-        # Antes de salvar o objeto, remover o keras model da surrogate
-        model_backup = self.surrogate.named_steps['regressor'].model
-        self.surrogate.named_steps['regressor'].model = None
+        keras_owner, keras_attr, keras_model = _find_keras_model(self.surrogate)
 
-        # Salvar o objeto via pickle
-        with open(Path(path) / "fr_model_flow.pkl", 'wb') as f:
+        # 1) Se houver modelo Keras, salvar separadamente e retirar antes do dill
+        model_path = path / "fr_model_surrogate_model.h5"
+        if keras_model is not None:
+            keras_model.save(model_path)
+            # backup e remoção
+            model_backup = keras_model
+            setattr(keras_owner, keras_attr, None)
+        else:
+            model_backup = None
+
+        # 2) Salvar o objeto principal com dill
+        pkl_path = path / "fr_model_flow.pkl"
+        with open(pkl_path, 'wb') as f:
             dill.dump(self, f)
 
-        # Restaurar o modelo em memória
-        self.surrogate.named_steps['regressor'].model = model_backup
+        # 3) Restaurar o ponteiro em memória (não afeta o arquivo)
+        if model_backup is not None:
+            setattr(keras_owner, keras_attr, model_backup)
 
-        print(f"FlowReconstruction salvo em {path}_flow.pkl e modelo salvo em {path}_surrogate_model.h5")
+        print(f"FlowReconstruction salvo em {pkl_path}")
+        if keras_model is not None:
+            print(f"Modelo Keras salvo em {model_path}")
         return self
 
     @staticmethod
     def load(path):
-        """
-        Carrega o FlowReconstruction e seu modelo Keras.
-        """
         from pathlib import Path
         from tensorflow import keras
 
-        # Carregar o objeto
-        with open(Path(path) / "fr_model_flow.pkl", 'rb') as f:
+        path = Path(path)
+        pkl_path = path / "fr_model_flow.pkl"
+        model_path = path / "fr_model_surrogate_model.h5"
+
+        # 1) Carrega o objeto dill
+        with open(pkl_path, 'rb') as f:
             obj = dill.load(f)
 
-        # Carregar o modelo keras
-        model_path = Path(path) / "fr_model_surrogate_model.h5"
-        obj.surrogate.named_steps['regressor'].model = keras.models.load_model(model_path, compile=False)
+        # 2) Se existir um arquivo Keras, restaura
+        if model_path.exists():
+            keras_owner, keras_attr, _ = _find_keras_model(obj.surrogate)
+            if keras_owner is None:
+                # Não deveria acontecer se o arquivo existe, mas tratamos graciosamente
+                print("Aviso: arquivo .h5 encontrado, mas não há onde anexar o modelo no surrogate.")
+            else:
+                setattr(
+                    keras_owner,
+                    keras_attr,
+                    keras.models.load_model(model_path, compile=False)
+                )
 
-        print(f"FlowReconstruction carregado de {path}/fr_model_flow.pkl e modelo de {path}/fr_model_surrogate_model.h5")
+        print(f"FlowReconstruction carregado de {pkl_path}")
+        if model_path.exists():
+            print(f"Modelo Keras carregado de {model_path}")
         return obj
     
     def setattr(self, **kwargs):
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-# Abstract class
-class FRBuilder(FR):
-    def __init__(self, X_rom, y_rom, surrogate, surrogate_kwargs, **kwargs) -> None:
-        super().__init__(
-            X_rom=X_rom, 
-            y_rom=y_rom, 
-            surrogate=surrogate, 
-            surrogate_kwargs=surrogate_kwargs
-        )
-
-        self.TRAINING_X = Path(self.TRAINING_X)
-        self.TRAINING_y = Path(self.TRAINING_y)
-        self.TEST_X = Path(self.TEST_X)
-        self.TEST_y = Path(self.TEST_y)
-        self.VALIDATION_X = Path(self.VALIDATION_X)
-        self.VALIDATION_y = Path(self.VALIDATION_y)
-        
-        self.set_dataset(
-            training_X_file=self.TRAINING_X,
-            training_y_file=self.TRAINING_y,
-            test_X_file=self.TEST_X,
-            test_y_file=self.TEST_y,
-            validation_X_file=self.VALIDATION_X,
-            validation_y_file=self.VALIDATION_y,
-            low_fidelity_variables=self.LF_VARIABLES,
-            high_fidelity_variables=self.HF_VARIABLES
-        )
-       
-    def build(self, **kwargs):
-        # Not implemented
-        pass
-
-    def metrics(self):
-        # Not implemented
-        pass
-
-    def plot(self, variable):
-        # Not implemented
-        pass
-
-    def plot_ith_prediction(self, ground_truth, prediction, i, variable):
-        import matplotlib.pyplot as plt
-        plt.figure()
-        idx_dict = self.idx_dict_y_test
-        plt.plot(ground_truth[i][idx_dict[variable]])
-        plt.plot(prediction[i][idx_dict[variable]], ls='-.')
-        
-    def plot_predictions(self, variable='UPPER_WALL/Heat_Flux'):
-        prediction = self.predict(self.snapshots_X_test)
-        ground_truth = self.snapshots_y_test
-
-        for i in range(len(ground_truth)):
-            self.plot_ith_prediction(ground_truth, prediction, i, variable)
-    
-
-class FRLinearBuilder(FRBuilder):
-    def __init__(self, **kwargs):
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-
-        X_scaler = ('scaler', MinMaxScaler())
-        y_scaler = ('scaler', MinMaxScaler())
-        
-        if self.N_COMPONENTS_X is None:
-            X_reducer = ('reducer', IdentityTransformer())
-        else:
-            X_reducer = ('reducer', TruncatedSVD(n_components=self.N_COMPONENTS_X))
-        
-        if self.N_COMPONENTS_y is None:
-            y_reducer = ('reducer', IdentityTransformer())
-        else:
-            y_reducer = ('reducer', TruncatedSVD(n_components=self.N_COMPONENTS_y))
-
-        X_rom = Pipeline([
-            X_scaler ,
-            X_reducer,
-        ])
-
-        y_rom = Pipeline([
-            y_scaler,
-            y_reducer,
-        ])
-
-        surrogate = Pipeline([
-            ('regressor', LinearRegression())
-        ])
-        
-        surrogate_kwargs={}
-
-        super().__init__(
-            X_rom=X_rom, 
-            y_rom=y_rom, 
-            surrogate=surrogate, 
-            surrogate_kwargs=surrogate_kwargs)
-
-class FRKrigingBuilder(FRBuilder):
-    def __init__(self, **kwargs):
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-
-        X_scaler = ('scaler', MinMaxScaler())
-        y_scaler = ('scaler', MinMaxScaler())
-
-        
-        if self.N_COMPONENTS_X is None:
-            X_reducer = ('reducer', IdentityTransformer())
-        else:
-            X_reducer = ('reducer', TruncatedSVD(n_components=self.N_COMPONENTS_X))
-        
-        if self.N_COMPONENTS_y is None:
-            y_reducer = ('reducer', IdentityTransformer())
-        else:
-            y_reducer = ('reducer', TruncatedSVD(n_components=self.N_COMPONENTS_y))
-
-        X_rom = Pipeline([
-            X_scaler ,
-            X_reducer,
-        ])
-
-        y_rom = Pipeline([
-            y_scaler,
-            y_reducer,
-        ])
-
-        kernel = 1.0 * ExpSineSquared(
-            length_scale=1.0,
-            periodicity=3.0,
-            length_scale_bounds=(0.1, 10.0),
-            periodicity_bounds=(1.0, 10.0),
-        )
-
-        kernel = 1.0 * RBF(
-            length_scale=1.0, 
-            length_scale_bounds=(1e-1, 10.0)
-        )
-
-        surrogate = Pipeline([
-            ('regressor', GaussianProcessRegressor()
-                #kernel=kernel,
-                #alpha=1e-10,
-                #normalize_y=True,
-                #n_restarts_optimizer=1,
-                #optimizer='fmin_l_bfgs_b',
-                #)
-            )
-        ])
-        
-        surrogate_kwargs={}
-
-        super().__init__(
-            X_rom=X_rom, 
-            y_rom=y_rom, 
-            surrogate=surrogate, 
-            surrogate_kwargs=surrogate_kwargs)
-
-class FRNNBuilder(FRBuilder):
-    def __init__(self, **kwargs):
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-
-        X_scaler = ('scaler', MinMaxScaler())
-        y_scaler = ('scaler', MinMaxScaler())
-        
-        if self.N_COMPONENTS_X is None:
-            X_reducer = ('reducer', IdentityTransformer())
-        else:
-            X_reducer = ('reducer', TruncatedSVD(n_components=self.N_COMPONENTS_X))
-        
-        if self.N_COMPONENTS_y is None:
-            y_reducer = ('reducer', IdentityTransformer())
-        else:
-            y_reducer = ('reducer', TruncatedSVD(n_components=self.N_COMPONENTS_y))
-
-        X_rom = Pipeline([
-            X_scaler ,
-            X_reducer,
-        ])
-
-        y_rom = Pipeline([
-            y_scaler,
-            y_reducer,
-        ])
-
-        surrogate = Pipeline([ 
-                    ('regressor', NeuralNetwork(    
-                    num_inputs=self.N_COMPONENTS_X,
-                    num_outputs=self.N_COMPONENTS_y,
-                    num_layers=self.N_LAYERS,
-                    num_neurons=self.N_NEURONS,
-                    activation=self.ACTIVATION,
-                    optimizer=self.OPTIMIZER, 
-                    loss=self.LOSS,)),
-        ])[0]
-
-        surrogate_kwargs=dict( 
-            epochs= self.EPOCHS, 
-            batch_size= self.BATCH_SIZE, 
-        )
-
-        super().__init__(X_rom=X_rom, y_rom=y_rom, surrogate=surrogate, surrogate_kwargs=surrogate_kwargs)
