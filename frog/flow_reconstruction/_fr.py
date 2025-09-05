@@ -1,4 +1,5 @@
 import dill
+import pickle
 from typing import Union
 from pathlib import Path
 import numpy as np
@@ -19,27 +20,9 @@ from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
 
 def load(path):
     with open(path, 'rb') as f:
-        return dill.load(f)  # em vez de pickle.load
+        fr = pickle.load(f)
+    return fr
 
-def _find_keras_model(holder):
-    """
-    Tenta achar um modelo Keras dentro de um objeto que pode ser
-    um Pipeline, um estimador simples, etc.
-    Retorna (obj_ref, attr_name) se achar (para setar None/restaurar),
-    e o próprio model. Caso contrário, retorna (None, None, None).
-    """
-    try:
-        # Caso Pipeline com passo 'regressor'
-        if hasattr(holder, "named_steps") and 'regressor' in holder.named_steps:
-            reg = holder.named_steps['regressor']
-            if hasattr(reg, 'model') and reg.model is not None:
-                return (reg, 'model', reg.model)
-        # Caso o próprio holder tenha .model
-        if hasattr(holder, 'model') and holder.model is not None:
-            return (holder, 'model', holder.model)
-    except Exception:
-        pass
-    return (None, None, None)
 
 class FlowReconstruction(BaseEstimator, TransformerMixin):
     def __init__(self, X_rom=None, y_rom=None, surrogate=None, surrogate_kwargs : dict = {}, **kwargs):
@@ -87,15 +70,12 @@ class FlowReconstruction(BaseEstimator, TransformerMixin):
         return self.transform(X, y)
     
     def transform(self, X, y=None, **kwargs):
-        from copy import copy
-
         X_in = self.X_rom.transform(X)
         y_out = self.surrogate.predict(X_in, **kwargs)
 
-        self.X_latent = copy(X_in)
-        self.y_latent = copy(y_out)
-
         if 'return_std' in kwargs.keys():
+            from copy import copy
+
             out = copy(y_out)
             y_out = out[0]
             std = out[1]
@@ -120,7 +100,6 @@ class FlowReconstruction(BaseEstimator, TransformerMixin):
             
         if 'return_std' in kwargs.keys():
             y_out = (y_out, std)
-
         return y_out
 
     def inverse_transform(self, y):
@@ -197,67 +176,157 @@ class FlowReconstruction(BaseEstimator, TransformerMixin):
 
         return y_out
     
+    # def save(self, path):
+    #     """
+    #     Salva o FlowReconstruction separadamente do modelo Keras.
+    #     """
+    #     from pathlib import Path
+
+    #     if hasattr(self.surrogate.named_steps['regressor'], 'model'):  
+    #         # Salvar modelo keras
+    #         model_path = Path(path) / "fr_model_surrogate_model.h5"
+    #         self.surrogate.named_steps['regressor'].model.save(model_path)
+
+    #         # Antes de salvar o objeto, remover o keras model da surrogate
+    #         model_backup = self.surrogate.named_steps['regressor'].model
+    #         self.surrogate.named_steps['regressor'].model = None
+
+    #         # Salvar o objeto via pickle
+    #         with open(Path(path) / "fr_model_flow.pkl", 'wb') as f:
+    #             dill.dump(self, f)
+
+    #         # Restaurar o modelo em memória
+    #         self.surrogate.named_steps['regressor'].model = model_backup
+
+    #         print(f"FlowReconstruction salvo em {path}_flow.pkl e modelo salvo em {path}_surrogate_model.h5")
+
+    #     else:
+    #         if not Path(path).exists():
+    #             Path(path).mkdir(parents=True, exist_ok=True)
+    #         # Salvar o objeto via pickle
+    #         with open(Path(path) / "fr_model_flow.pkl", 'wb') as f:
+    #             dill.dump(self, f)
+
+    #         print(f"FlowReconstruction salvo em {path}_flow.pkl")
+    #     return self
+
     def save(self, path):
+        """
+        Save the FlowReconstruction object and its components safely.
+        """
         from pathlib import Path
+        import dill
+        import joblib
+
         path = Path(path)
         path.mkdir(parents=True, exist_ok=True)
 
-        keras_owner, keras_attr, keras_model = _find_keras_model(self.surrogate)
+        keras_model = None
+        has_keras_model = (
+            hasattr(self.surrogate, 'named_steps') and
+            'regressor' in self.surrogate.named_steps and
+            hasattr(self.surrogate.named_steps['regressor'], 'model') and
+            self.surrogate.named_steps['regressor'].model is not None
+        )
 
-        # 1) Se houver modelo Keras, salvar separadamente e retirar antes do dill
-        model_path = path / "fr_model_surrogate_model.h5"
-        if keras_model is not None:
+        if has_keras_model:
+            keras_model = self.surrogate.named_steps['regressor'].model
+            model_path = path / "fr_model_surrogate_model.h5"
             keras_model.save(model_path)
-            # backup e remoção
-            model_backup = keras_model
-            setattr(keras_owner, keras_attr, None)
-        else:
-            model_backup = None
+            self.surrogate.named_steps['regressor'].model = None
 
-        # 2) Salvar o objeto principal com dill
-        pkl_path = path / "fr_model_flow.pkl"
-        with open(pkl_path, 'wb') as f:
+        # Salvar componentes separadamente
+        joblib.dump(self.X_rom, path / "X_rom.pkl")
+        joblib.dump(self.y_rom, path / "y_rom.pkl")
+        #joblib.dump(self.surrogate, path / "surrogate.pkl")
+        with open(path / "surrogate.pkl", 'wb') as f:
+            dill.dump(self.surrogate, f)
+
+        # Salvar o restante da classe (sem os componentes já salvos)
+        tmp_X_rom = self.X_rom
+        tmp_y_rom = self.y_rom
+        tmp_surrogate = self.surrogate
+
+        self.X_rom = None
+        self.y_rom = None
+        self.surrogate = None
+
+        with open(path / "fr_model_flow.pkl", 'wb') as f:
             dill.dump(self, f)
 
-        # 3) Restaurar o ponteiro em memória (não afeta o arquivo)
-        if model_backup is not None:
-            setattr(keras_owner, keras_attr, model_backup)
+        # Restaurar objetos em memória
+        self.X_rom = tmp_X_rom
+        self.y_rom = tmp_y_rom
+        self.surrogate = tmp_surrogate
+        if has_keras_model:
+            self.surrogate.named_steps['regressor'].model = keras_model
 
-        print(f"FlowReconstruction salvo em {pkl_path}")
-        if keras_model is not None:
-            print(f"Modelo Keras salvo em {model_path}")
-        return self
-
+        print(f"Saved model to: {path}")
+    
     @staticmethod
     def load(path):
+        """
+        Load the FlowReconstruction object and reattach its components.
+        """
         from pathlib import Path
+        import dill
+        import joblib
         from tensorflow import keras
 
         path = Path(path)
-        pkl_path = path / "fr_model_flow.pkl"
-        model_path = path / "fr_model_surrogate_model.h5"
 
-        # 1) Carrega o objeto dill
-        with open(pkl_path, 'rb') as f:
+        # Carrega o objeto principal
+        with open(path / "fr_model_flow.pkl", 'rb') as f:
             obj = dill.load(f)
 
-        # 2) Se existir um arquivo Keras, restaura
-        if model_path.exists():
-            keras_owner, keras_attr, _ = _find_keras_model(obj.surrogate)
-            if keras_owner is None:
-                # Não deveria acontecer se o arquivo existe, mas tratamos graciosamente
-                print("Aviso: arquivo .h5 encontrado, mas não há onde anexar o modelo no surrogate.")
-            else:
-                setattr(
-                    keras_owner,
-                    keras_attr,
-                    keras.models.load_model(model_path, compile=False)
-                )
+        # Carrega os componentes salvos separadamente
+        obj.X_rom = joblib.load(path / "X_rom.pkl")
+        obj.y_rom = joblib.load(path / "y_rom.pkl")
+        #obj.surrogate = dill.load(path / "surrogate.pkl")
+        with open(path / "surrogate.pkl", "rb") as f:
+            obj.surrogate = dill.load(f)
+        
 
-        print(f"FlowReconstruction carregado de {pkl_path}")
+        # Restaura o modelo Keras se existir
+        model_path = path / "fr_model_surrogate_model.h5"
         if model_path.exists():
-            print(f"Modelo Keras carregado de {model_path}")
+            if (
+                hasattr(obj.surrogate, 'named_steps') and
+                'regressor' in obj.surrogate.named_steps and
+                hasattr(obj.surrogate.named_steps['regressor'], 'model')
+            ):
+                obj.surrogate.named_steps['regressor'].model = keras.models.load_model(model_path, compile=False)
+                print(f"Loaded model and Keras model from: {path}")
+            else:
+                print("Keras model found but regressor has no `model` attribute.")
+        else:
+            print(f"Loaded model (no Keras model) from: {path}")
+
         return obj
+
+
+    # @staticmethod
+    # def load(path):
+    #     """
+    #     Carrega o FlowReconstruction e seu modelo Keras.
+    #     """
+    #     from pathlib import Path
+    #     from tensorflow import keras
+    #     import os
+    #     # Carregar o objeto
+    #     with open(Path(path) / "fr_model_flow.pkl", 'rb') as f:
+    #         obj = dill.load(f)
+
+    #     if os.path.exists(Path(path) / "fr_model_surrogate_model.h5"):
+    #         # Carregar o modelo keras
+    #         model_path = Path(path) / "fr_model_surrogate_model.h5"
+    #         obj.surrogate.named_steps['regressor'].model = keras.models.load_model(model_path, compile=False)
+
+    #         print(f"FlowReconstruction carregado de {path}/fr_model_flow.pkl e modelo de {path}/fr_model_surrogate_model.h5")
+
+    #     else:
+    #         print(f"FlowReconstruction carregado de {path}/fr_model_flow.pkl.")
+    #     return obj
     
     def setattr(self, **kwargs):
         for key, value in kwargs.items():
